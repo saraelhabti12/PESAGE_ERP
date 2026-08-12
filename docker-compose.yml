@@ -1,0 +1,67 @@
+services:
+
+  postgres:
+    image: postgres:17
+    container_name: erp_postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: erp_db
+      POSTGRES_USER: erp_user
+      POSTGRES_PASSWORD: erp_password
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    networks:
+      - erp_network
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp_user -d erp_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  redis:
+    image: redis:8-alpine
+    container_name: erp_redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    networks:
+      - erp_network
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: erp_mailpit
+    restart: unless-stopped
+
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+    networks:
+      - erp_network
+
+
+volumes:
+  postgres_data:
+
+
+networks:
+  erp_network:
+    driver: bridge
