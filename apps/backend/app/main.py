@@ -1,27 +1,33 @@
-import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
-from fastapi.exceptions import RequestValidationError, HTTPException
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
+from app.core.bootstrap import bootstrap_system
 from app.core.config import settings
-from app.core.logging import setup_logging, logger
+from app.core.logging import logger, setup_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} [{settings.ENVIRONMENT}]")
-    
+
     # Enforce CORS check for production environment
     if settings.ENVIRONMENT == "production":
         if "*" in settings.CORS_ORIGINS:
             raise ValueError("Wildcard '*' CORS origin is not permitted in production environment")
-            
+
+    # Bootstrap system permissions, roles, and initial admin account
+    try:
+        bootstrap_system()
+    except Exception as e:
+        logger.error(f"Failed system bootstrap on startup: {str(e)}")
+
     yield
     logger.info(f"Shutting down {settings.APP_NAME}")
 

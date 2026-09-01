@@ -12,6 +12,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings
 from app.db.base import Base
+import app.models.associations  # noqa: F401
+import app.models.permission_model  # noqa: F401
+import app.models.role_model  # noqa: F401
+import app.models.user_model  # noqa: F401
+import app.models.session_model  # noqa: F401
+import app.models.category_model  # noqa: F401
+import app.models.product_type_model  # noqa: F401
+import app.models.brand_model  # noqa: F401
+import app.models.unit_model  # noqa: F401
+import app.models.product_model  # noqa: F401
+import app.models.partner_model  # noqa: F401
+import app.models.purchase_model  # noqa: F401
+import app.models.notification_model  # noqa: F401
+import app.models.stock_model  # noqa: F401
 
 # Alembic Config object
 config = context.config

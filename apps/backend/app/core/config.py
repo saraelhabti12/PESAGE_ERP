@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_KEY_FOR_DEVELOPMENT"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    ADMIN_EMAIL: str = "admin@example.com"
+    ADMIN_PASSWORD: str = "CHANGE_THIS_PASSWORD"
 
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379

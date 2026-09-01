@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Pesage 2000 Logo Derived Exact Color Palette */
+  --pesage-blue-deep: #000E6E;
+  --pesage-blue-dark: #001394;
+  --pesage-blue-primary: #001BB7; /* Exact Royal/Cobalt Blue from logo text P E S A G E */
+  --pesage-blue-light: #2B44FF;
+  --pesage-blue-subtle: #EEF2FF;
+
+  --pesage-orange-dark: #E03E19;
+  --pesage-orange-primary: #FF5B36; /* Exact Vibrant Coral/Orange from logo scale & 2000 */
+  --pesage-orange-light: #FF8266;
+  --pesage-orange-subtle: #FFF1EE;
+
+  /* LIGHT MODE (MODE CLAIR PESAGE 2000) - Soft, Airy, Professional Commercial ERP */
+  --app-bg: #F8FAFC;                 /* Soft Slate 50 Background */
+  --app-sidebar-bg: #FFFFFF;         /* Pure White Sidebar */
+  --app-topbar-bg: #FFFFFF;          /* Pure White Topbar */
+  --app-surface: #FFFFFF;            /* Pure White Elevated Cards */
+  --app-surface-hover: #F8FAFC;      /* Soft Slate Hover */
+  --app-surface-subtle: #F1F5F9;     /* Light Container Sub-surface */
+  --app-border: #E2E8F0;             /* Ultra-delicate Soft 1px Border */
+  --app-border-strong: #CBD5E1;      /* Subtle Border */
+
+  --app-text: #0F172A;                /* Slate 900 Text */
+  --app-text-secondary: #475569;      /* Slate 600 Secondary Text */
+  --app-text-muted: #64748B;          /* Slate 500 Muted Text */
+
+  --app-primary: #001BB7;             /* Logo Royal Blue Primary */
+  --app-primary-hover: #001394;       /* Hover Royal Blue */
+  --app-accent: #FF5B36;              /* Logo Coral Orange Accent */
+  --app-accent-hover: #E03E19;
+}
+
+.dark {
+  /* DARK MODE (MODE SOMBRE PESAGE 2000) - Soft Slate Navy (Non-Harsh) */
+  --app-bg: #0F172A;                 /* Soft Slate 900 Background */
+  --app-sidebar-bg: #1E293B;         /* Slate 800 Sidebar */
+  --app-topbar-bg: #1E293B;          /* Slate 800 Topbar */
+  --app-surface: #1E293B;            /* Slate 800 Surface Cards */
+  --app-surface-hover: #334155;      /* Slate 700 Surface Hover */
+  --app-surface-subtle: #0F172A;     /* Slate 900 Sub-container */
+  --app-border: #334155;             /* Subtle Slate 700 Border */
+  --app-border-strong: #475569;      /* Slate 600 Border */
+
+  --app-text: #F8FAFC;                /* Slate 50 Soft White Text */
+  --app-text-secondary: #CBD5E1;      /* Slate 300 Subtext */
+  --app-text-muted: #94A3B8;          /* Slate 400 Muted Text */
+
+  --app-primary: #2563EB;             /* Soft Royal Blue for Dark Mode */
+  --app-primary-hover: #3B82F6;       /* Hover Blue */
+  --app-accent: #FF5B36;              /* Logo Coral Orange Accent */
+  --app-accent-hover: #FF8266;
+}
+
+@layer base {
+  body {
+    background-color: var(--app-bg);
+    color: var(--app-text);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  ::selection {
+    background-color: rgba(255, 91, 54, 0.25);
+    color: #001BB7;
+  }
+}
+
+/* Custom Pesage 2000 Corporate Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--app-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--app-border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-primary);
+}
+

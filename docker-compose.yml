@@ -58,6 +58,86 @@ services:
       - erp_network
 
 
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: erp_backend
+    restart: unless-stopped
+
+    environment:
+      DATABASE_URL: postgresql://erp_user:erp_password@postgres:5432/erp_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SECRET_KEY: CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_KEY_FOR_DEVELOPMENT
+      APP_ENV: development
+      ENVIRONMENT: development
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:3000","http://127.0.0.1:5173"]'
+
+    volumes:
+      - ./apps/backend:/app
+
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - erp_network
+
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    container_name: erp_frontend
+    restart: unless-stopped
+
+    environment:
+      VITE_API_URL: http://localhost:8000
+
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
+
+    ports:
+      - "5173:5173"
+
+    depends_on:
+      - backend
+
+    networks:
+      - erp_network
+
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: erp_pgadmin
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@erp.local
+      PGADMIN_DEFAULT_PASSWORD: ChangeThisDevelopmentPassword
+      PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS: "['local', 'erp.local']"
+      PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY: "False"
+
+    ports:
+      - "5050:80"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - erp_network
+
+
 volumes:
   postgres_data:
 
