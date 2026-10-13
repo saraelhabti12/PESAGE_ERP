@@ -13,6 +13,11 @@ import app.models.product_type_model  # noqa: F401
 import app.models.brand_model  # noqa: F401
 import app.models.unit_model  # noqa: F401
 import app.models.product_model  # noqa: F401
+import app.models.quote_model  # noqa: F401
+import app.models.sale_model  # noqa: F401
+import app.models.delivery_note_model  # noqa: F401
+import app.models.invoice_model  # noqa: F401
+import app.models.payment_model  # noqa: F401
 from app.security.passwords import hash_password
 
 INITIAL_PERMISSIONS = [
@@ -46,6 +51,8 @@ INITIAL_PERMISSIONS = [
     {"module": "sales", "action": "create", "code": "sales.create", "description": "Create sales"},
     {"module": "sales", "action": "update", "code": "sales.update", "description": "Update sales"},
     {"module": "sales", "action": "delete", "code": "sales.delete", "description": "Delete sales"},
+    {"module": "sales", "action": "confirm", "code": "sales.confirm", "description": "Confirm sales orders"},
+    {"module": "sales", "action": "cancel", "code": "sales.cancel", "description": "Cancel sales orders"},
     # Stock
     {"module": "stock", "action": "view", "code": "stock.view", "description": "View stock"},
     {"module": "stock", "action": "adjust", "code": "stock.adjust", "description": "Adjust stock levels"},
@@ -82,11 +89,32 @@ INITIAL_PERMISSIONS = [
     {"module": "purchase_receipts", "action": "create", "code": "purchase_receipts.create", "description": "Create purchase receipts"},
     {"module": "purchase_receipts", "action": "update", "code": "purchase_receipts.update", "description": "Update purchase receipts"},
     {"module": "purchase_receipts", "action": "confirm", "code": "purchase_receipts.confirm", "description": "Confirm purchase receipts"},
+    # Quotes (Devis)
+    {"module": "quotes", "action": "view", "code": "quotes.view", "description": "View quotes"},
+    {"module": "quotes", "action": "create", "code": "quotes.create", "description": "Create quotes"},
+    {"module": "quotes", "action": "update", "code": "quotes.update", "description": "Update quotes"},
+    {"module": "quotes", "action": "delete", "code": "quotes.delete", "description": "Delete quotes"},
+    {"module": "quotes", "action": "send", "code": "quotes.send", "description": "Send quotes to client"},
+    {"module": "quotes", "action": "accept", "code": "quotes.accept", "description": "Accept quotes"},
+    {"module": "quotes", "action": "reject", "code": "quotes.reject", "description": "Reject quotes"},
+    {"module": "quotes", "action": "convert", "code": "quotes.convert", "description": "Convert quotes to sales"},
+    # Delivery Notes (Bons de livraison)
+    {"module": "delivery_notes", "action": "view", "code": "delivery_notes.view", "description": "View delivery notes"},
+    {"module": "delivery_notes", "action": "create", "code": "delivery_notes.create", "description": "Create delivery notes"},
+    {"module": "delivery_notes", "action": "update", "code": "delivery_notes.update", "description": "Update delivery notes"},
+    {"module": "delivery_notes", "action": "confirm", "code": "delivery_notes.confirm", "description": "Confirm delivery notes"},
+    {"module": "delivery_notes", "action": "cancel", "code": "delivery_notes.cancel", "description": "Cancel delivery notes"},
     # Invoices
     {"module": "invoices", "action": "view", "code": "invoices.view", "description": "View invoices"},
     {"module": "invoices", "action": "create", "code": "invoices.create", "description": "Create invoices"},
     {"module": "invoices", "action": "update", "code": "invoices.update", "description": "Update invoices"},
     {"module": "invoices", "action": "delete", "code": "invoices.delete", "description": "Delete invoices"},
+    {"module": "invoices", "action": "issue", "code": "invoices.issue", "description": "Issue invoices"},
+    {"module": "invoices", "action": "cancel", "code": "invoices.cancel", "description": "Cancel invoices"},
+    # Payments
+    {"module": "payments", "action": "view", "code": "payments.view", "description": "View payments"},
+    {"module": "payments", "action": "create", "code": "payments.create", "description": "Record payments"},
+    {"module": "payments", "action": "delete", "code": "payments.delete", "description": "Delete payments"},
     # Tickets
     {"module": "tickets", "action": "view", "code": "tickets.view", "description": "View tickets"},
     {"module": "tickets", "action": "create", "code": "tickets.create", "description": "Create tickets"},
@@ -121,6 +149,22 @@ INITIAL_PERMISSIONS = [
     {"module": "addresses", "action": "create", "code": "addresses.create", "description": "Create partner addresses"},
     {"module": "addresses", "action": "update", "code": "addresses.update", "description": "Update partner addresses"},
     {"module": "addresses", "action": "delete", "code": "addresses.delete", "description": "Delete partner addresses"},
+    # Audit
+    {"module": "audit", "action": "view", "code": "audit.view", "description": "View audit logs"},
+    # Dashboard
+    {"module": "dashboard", "action": "view", "code": "dashboard.view", "description": "View dashboard analytics"},
+    # Settings
+    {"module": "settings", "action": "manage", "code": "settings.manage", "description": "Manage system settings"},
+    # Expenses
+    {"module": "expenses", "action": "view", "code": "expenses.view", "description": "View expenses"},
+    {"module": "expenses", "action": "create", "code": "expenses.create", "description": "Create expenses"},
+    {"module": "expenses", "action": "update", "code": "expenses.update", "description": "Update expenses"},
+    {"module": "expenses", "action": "delete", "code": "expenses.delete", "description": "Delete expenses"},
+    # Vehicles
+    {"module": "vehicles", "action": "view", "code": "vehicles.view", "description": "View vehicles & fleet"},
+    {"module": "vehicles", "action": "create", "code": "vehicles.create", "description": "Create vehicles & records"},
+    {"module": "vehicles", "action": "update", "code": "vehicles.update", "description": "Update vehicles & records"},
+    {"module": "vehicles", "action": "delete", "code": "vehicles.delete", "description": "Delete vehicles & records"},
 ]
 
 INITIAL_ROLES = [
@@ -175,7 +219,7 @@ def bootstrap_system(db: Session = None) -> None:
         comptable_role = role_map["COMPTABLE"]
         comptable_perms = [
             p for code, p in perm_map.items()
-            if p.module in ("sales", "purchases", "purchase_receipts", "invoices", "partners", "customers", "suppliers", "contacts", "addresses")
+            if p.module in ("quotes", "sales", "delivery_notes", "invoices", "payments", "purchases", "purchase_receipts", "partners", "customers", "suppliers", "contacts", "addresses", "expenses", "dashboard", "audit")
         ]
         comptable_role.permissions = list({p.id: p for p in (comptable_role.permissions + comptable_perms)}.values())
 
@@ -186,13 +230,13 @@ def bootstrap_system(db: Session = None) -> None:
                 "products", "categories", "product_types", "brands", "units",
                 "stock", "warehouses", "stock_movements", "stock_transfers",
                 "stock_reservations", "inventory", "purchases", "purchase_receipts",
-                "suppliers", "partners"
+                "delivery_notes", "suppliers", "partners", "vehicles", "dashboard"
             )
         ]
         magasinier_role.permissions = list({p.id: p for p in (magasinier_role.permissions + magasinier_perms)}.values())
 
         tech_role = role_map["TECHNICIEN"]
-        tech_perms = [p for code, p in perm_map.items() if p.module in ("tickets", "customers", "contacts")]
+        tech_perms = [p for code, p in perm_map.items() if p.module in ("tickets", "customers", "contacts", "vehicles", "dashboard")]
         tech_role.permissions = list({p.id: p for p in (tech_role.permissions + tech_perms)}.values())
 
         db.commit()

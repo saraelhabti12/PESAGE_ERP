@@ -52,15 +52,17 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   // Fetch unread count & notifications
   const fetchUnreadCount = useCallback(async () => {
+    if (!user || !localStorage.getItem('access_token')) return;
     try {
       const res = await api.get<{ unread_count: number }>('/api/v1/notifications/unread-count');
       setUnreadCount(res.data.unread_count);
     } catch {
       // Non-blocking fallback
     }
-  }, []);
+  }, [user]);
 
   const fetchNotifications = useCallback(async () => {
+    if (!user || !localStorage.getItem('access_token')) return;
     setIsLoadingNotifs(true);
     try {
       const res = await api.get<AppNotification[]>('/api/v1/notifications?limit=20');
@@ -72,13 +74,14 @@ export const TopBar: React.FC<TopBarProps> = ({
     } finally {
       setIsLoadingNotifs(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (!user) return;
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000); // 30s poll
     return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+  }, [user, fetchUnreadCount]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

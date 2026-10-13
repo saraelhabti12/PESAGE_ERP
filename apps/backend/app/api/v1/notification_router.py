@@ -46,6 +46,19 @@ def get_unread_count(
 
 
 @router.post(
+    "/read-all",
+    status_code=status.HTTP_200_OK,
+)
+def mark_all_notifications_as_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Marks all unread notifications for the current user as read."""
+    count = NotificationService.mark_all_as_read(db=db, user_id=current_user.id)
+    return {"status": "ok", "marked_read_count": count}
+
+
+@router.post(
     "/{notification_id}/read",
     response_model=NotificationRead,
     status_code=status.HTTP_200_OK,
@@ -64,15 +77,3 @@ def mark_notification_as_read(
         )
     return notif
 
-
-@router.post(
-    "/read-all",
-    status_code=status.HTTP_200_OK,
-)
-def mark_all_notifications_as_read(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Marks all unread notifications for the current user as read."""
-    count = NotificationService.mark_all_as_read(db=db, user_id=current_user.id)
-    return {"status": "ok", "marked_read_count": count}

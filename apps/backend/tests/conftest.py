@@ -18,8 +18,36 @@ def db_clean_and_bootstrap():
     """Ensure clean test environment before each test while keeping system roles and Admin."""
     db = SessionLocal()
     try:
-        # Delete notification data
+        # Delete notification data and audit logs
         db.execute(text("DELETE FROM notifications;"))
+        db.execute(text("DELETE FROM audit_logs;"))
+
+        # Delete maintenance module tables
+        db.execute(text("DELETE FROM intervention_tasks;"))
+        db.execute(text("DELETE FROM intervention_parts;"))
+        db.execute(text("DELETE FROM interventions;"))
+        db.execute(text("DELETE FROM equipments;"))
+
+        # Delete new finalization modules data
+        db.execute(text("DELETE FROM credit_note_items;"))
+        db.execute(text("DELETE FROM credit_notes;"))
+        db.execute(text("DELETE FROM fuel_logs;"))
+        db.execute(text("DELETE FROM vehicle_maintenances;"))
+        db.execute(text("DELETE FROM vehicles;"))
+        db.execute(text("DELETE FROM expenses;"))
+        db.execute(text("DELETE FROM recurring_expenses;"))
+        db.execute(text("DELETE FROM employees;"))
+
+        # Delete commercial cycle tables
+        db.execute(text("DELETE FROM payments;"))
+        db.execute(text("DELETE FROM invoice_items;"))
+        db.execute(text("DELETE FROM invoices;"))
+        db.execute(text("DELETE FROM delivery_note_items;"))
+        db.execute(text("DELETE FROM delivery_notes;"))
+        db.execute(text("DELETE FROM sale_items;"))
+        db.execute(text("DELETE FROM sales;"))
+        db.execute(text("DELETE FROM quote_items;"))
+        db.execute(text("DELETE FROM quotes;"))
 
         # Delete purchase data
         db.execute(text("DELETE FROM purchase_receipt_items;"))

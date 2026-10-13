@@ -149,6 +149,18 @@ def run_verification():
     assert r_app.json()["status"] == "APPROVED"
     print(f"  -> Purchase order approved successfully.")
 
+    # 5b. Ensure Warehouse exists for reception
+    whs = client.get("/api/v1/warehouses", headers=headers).json()
+    if whs:
+        wh = whs[0]
+    else:
+        wh = client.post(
+            "/api/v1/warehouses",
+            json={"code": "WH-VERIF-01", "name": "Dépôt Vérification Phase 6", "type": "MAIN"},
+            headers=headers,
+        ).json()
+    wh_id = wh["id"]
+
     # 6. Create Partial Receipt 1 (Receiving 2 sensors out of 4)
     print("\n6. Creating Partial Receipt 1 (2 sensors / 4 ordered)...")
     r_rec1 = client.post(
@@ -156,6 +168,7 @@ def run_verification():
         json={
             "reference": "BL-MPM-00881",
             "purchase_order_id": po_id,
+            "warehouse_id": wh_id,
             "receipt_date": "2026-08-28T09:00:00Z",
             "notes": "1er colis livré par transporteur",
             "items": [
@@ -187,6 +200,7 @@ def run_verification():
         json={
             "reference": "BL-MPM-00895",
             "purchase_order_id": po_id,
+            "warehouse_id": wh_id,
             "receipt_date": "2026-08-30T14:30:00Z",
             "notes": "Solde de la commande reçu complet",
             "items": [

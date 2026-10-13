@@ -1,5 +1,6 @@
 import { BusinessPartner } from './partner';
 import { Product } from './catalog';
+import { Warehouse } from './warehouse';
 
 export type PurchaseOrderStatus =
   | 'DRAFT'
@@ -42,16 +43,19 @@ export interface PurchaseReceiptItem {
   purchase_receipt_id: number;
   purchase_order_item_id: number;
   product_id: number;
+  warehouse_id?: number | null;
   quantity_received: number;
   notes?: string | null;
   created_at: string;
   product?: Product;
+  warehouse?: Warehouse;
 }
 
 export interface PurchaseReceipt {
   id: number;
   reference: string;
   purchase_order_id: number;
+  warehouse_id?: number | null;
   receipt_date: string;
   status: PurchaseReceiptStatus;
   notes?: string | null;
@@ -64,6 +68,7 @@ export interface PurchaseReceipt {
     first_name?: string;
     last_name?: string;
   };
+  warehouse?: Warehouse;
   items: PurchaseReceiptItem[];
 }
 
@@ -110,12 +115,14 @@ export interface ReceiptItemFormData {
   purchase_order_item_id: number;
   product_id: number;
   quantity_received: number;
+  warehouse_id?: number | '';
   notes?: string;
 }
 
 export interface ReceiptFormData {
   reference?: string;
   purchase_order_id: number;
+  warehouse_id: number | '';
   receipt_date: string;
   notes?: string;
   items: ReceiptItemFormData[];

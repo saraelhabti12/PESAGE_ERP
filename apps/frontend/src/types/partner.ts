@@ -131,3 +131,35 @@ export interface PartnerUpdate {
   notes?: string;
   is_active?: boolean;
 }
+
+export interface CustomerFinancialMetrics {
+  total_quotes: number;
+  total_sales: number;
+  total_delivery_notes: number;
+  total_invoices: number;
+  total_credit_notes: number;
+  total_payments: number;
+  amount_invoiced: number;
+  amount_paid: number;
+  amount_due: number;
+  total_interventions: number;
+  last_transaction_date?: string | null;
+}
+
+export interface SupplierFinancialMetrics {
+  total_purchases: number;
+  total_receipts: number;
+  total_invoices: number;
+  amount_invoiced: number;
+  amount_paid: number;
+  amount_due: number;
+  total_payments: number;
+  last_transaction_date?: string | null;
+}
+
+export interface PartnerSummaryResponse {
+  partner_id: number;
+  partner_type: string;
+  customer?: CustomerFinancialMetrics | null;
+  supplier?: SupplierFinancialMetrics | null;
+}

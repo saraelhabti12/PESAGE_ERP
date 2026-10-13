@@ -46,7 +46,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -66,6 +66,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
+from fastapi.encoders import jsonable_encoder
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
@@ -74,7 +77,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": {
                 "code": status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "message": "Validation Error",
-                "details": exc.errors(),
+                "details": jsonable_encoder(exc.errors()),
             }
         },
     )

@@ -29,3 +29,12 @@ postgres_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend
+apps/frontend/dist/
+apps/frontend/tsconfig.tsbuildinfo
+node_modules/
+
+# Backend uploads
+apps/backend/uploads/*
+!apps/backend/uploads/.gitkeep

@@ -99,10 +99,20 @@ export interface StockThresholdUpdate {
 }
 
 export interface StockStats {
-  total_tracked_products: number;
-  total_stock_balances: number;
+  managed_products?: number;
+  total_tracked_products?: number;
+  tracked_products_count?: number;
+  total_stock_balances?: number;
+  total_quantity?: number;
+  total_value_ht?: number;
   total_stock_value: number;
-  out_of_stock_count: number;
+  low_stock?: number;
   low_stock_count: number;
+  out_of_stock?: number;
+  out_of_stock_count: number;
+  overstock?: number;
+  overstock_count?: number;
+  active_warehouses?: number;
+  movement_count?: number;
   total_movements_today: number;
 }

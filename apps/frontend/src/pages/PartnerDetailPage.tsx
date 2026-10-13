@@ -11,14 +11,16 @@ import {
   PartnerAddressCreate,
   PartnerAddressUpdate,
   AddressType,
+  PartnerSummaryResponse,
 } from '@/types/partner';
+import { AttachmentsSection } from '@/components/common/AttachmentsSection';
 import { Modal } from '@/components/ui/Modal';
 import { FormField } from '@/components/ui/FormField';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { useNotification } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
-import { formatDate } from '@/lib/formatters';
+import { formatDate, formatCurrency } from '@/lib/formatters';
 import {
   ArrowLeft,
   Building2,
@@ -38,6 +40,7 @@ import {
   Layers,
   FileText,
   ShoppingCart,
+  ShoppingBag,
   Truck,
   CreditCard,
   Wrench,
@@ -45,6 +48,14 @@ import {
   BarChart3,
   Info,
   Calendar,
+  ExternalLink,
+  TrendingUp,
+  DollarSign,
+  Clock,
+  Receipt,
+  RotateCcw,
+  ClipboardList,
+  Package,
 } from 'lucide-react';
 
 type TabType =
@@ -55,8 +66,13 @@ type TabType =
   | 'sales'
   | 'deliveries'
   | 'invoices'
+  | 'credit_notes'
   | 'payments'
   | 'interventions'
+  | 'purchases'
+  | 'receipts'
+  | 'supplier_invoices'
+  | 'supplier_payments'
   | 'documents'
   | 'analytics';
 
@@ -69,8 +85,26 @@ export const PartnerDetailPage: React.FC = () => {
   const [partner, setPartner] = useState<BusinessPartner | null>(null);
   const [contacts, setContacts] = useState<PartnerContact[]>([]);
   const [addresses, setAddresses] = useState<PartnerAddress[]>([]);
+  const [summary, setSummary] = useState<PartnerSummaryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('info');
+
+  // Customer tab data state
+  const [tabQuotes, setTabQuotes] = useState<any[]>([]);
+  const [tabSales, setTabSales] = useState<any[]>([]);
+  const [tabDeliveries, setTabDeliveries] = useState<any[]>([]);
+  const [tabInvoices, setTabInvoices] = useState<any[]>([]);
+  const [tabCreditNotes, setTabCreditNotes] = useState<any[]>([]);
+  const [tabPayments, setTabPayments] = useState<any[]>([]);
+  const [tabInterventions, setTabInterventions] = useState<any[]>([]);
+
+  // Supplier tab data state
+  const [tabPurchases, setTabPurchases] = useState<any[]>([]);
+  const [tabReceipts, setTabReceipts] = useState<any[]>([]);
+  const [tabSupplierInvoices, setTabSupplierInvoices] = useState<any[]>([]);
+  const [tabSupplierPayments, setTabSupplierPayments] = useState<any[]>([]);
+
+  const [isTabLoading, setIsTabLoading] = useState(false);
 
   // Partner edit & deactivation
   const [isEditPartnerOpen, setIsEditPartnerOpen] = useState(false);
@@ -119,20 +153,79 @@ export const PartnerDetailPage: React.FC = () => {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [partnerRes, contactsRes, addressesRes] = await Promise.all([
+      const [partnerRes, contactsRes, addressesRes, summaryRes] = await Promise.all([
         api.get<BusinessPartner>(`/api/v1/partners/${id}`),
         api.get<PartnerContact[]>(`/api/v1/partners/${id}/contacts`),
         api.get<PartnerAddress[]>(`/api/v1/partners/${id}/addresses`),
+        api.get<PartnerSummaryResponse>(`/api/v1/partners/${id}/summary`).catch(() => ({ data: null })),
       ]);
       setPartner(partnerRes.data);
       setContacts(contactsRes.data);
       setAddresses(addressesRes.data);
+      if (summaryRes?.data) {
+        setSummary(summaryRes.data);
+      }
     } catch (err: any) {
       showError(err.response?.data?.detail || 'Impossible de charger les détails du partenaire.');
     } finally {
       setIsLoading(false);
     }
   }, [id, showError]);
+
+  // Lazy load tab data when tab changes
+  const fetchTabData = useCallback(async (tab: TabType, partnerId: string) => {
+    if (tab === 'info' || tab === 'contacts' || tab === 'addresses' || tab === 'documents') return;
+    setIsTabLoading(true);
+    try {
+      if (tab === 'quotes') {
+        const res = await api.get(`/api/v1/quotes?customer_id=${partnerId}&size=50`);
+        setTabQuotes(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'sales') {
+        const res = await api.get(`/api/v1/sales?customer_id=${partnerId}&size=50`);
+        setTabSales(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'deliveries') {
+        const res = await api.get(`/api/v1/delivery-notes?customer_id=${partnerId}&size=50`);
+        setTabDeliveries(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'invoices') {
+        const res = await api.get(`/api/v1/invoices?customer_id=${partnerId}&invoice_type=CUSTOMER&size=50`);
+        setTabInvoices(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'credit_notes') {
+        const res = await api.get(`/api/v1/credit-notes?customer_id=${partnerId}&size=50`);
+        setTabCreditNotes(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'payments') {
+        const res = await api.get(`/api/v1/payments?customer_id=${partnerId}&size=50`);
+        setTabPayments(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'interventions') {
+        const res = await api.get(`/api/v1/maintenance/interventions?customer_id=${partnerId}&size=50`);
+        setTabInterventions(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'purchases') {
+        const res = await api.get(`/api/v1/purchases?supplier_id=${partnerId}&size=50`);
+        setTabPurchases(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'receipts') {
+        const res = await api.get(`/api/v1/purchase-receipts?supplier_id=${partnerId}&size=50`);
+        setTabReceipts(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'supplier_invoices') {
+        const res = await api.get(`/api/v1/invoices?supplier_id=${partnerId}&invoice_type=SUPPLIER&size=50`);
+        setTabSupplierInvoices(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'supplier_payments') {
+        const res = await api.get(`/api/v1/payments?supplier_id=${partnerId}&size=50`);
+        setTabSupplierPayments(Array.isArray(res.data) ? res.data : res.data?.items || []);
+      } else if (tab === 'analytics') {
+        const res = await api.get(`/api/v1/partners/${partnerId}/summary`);
+        setSummary(res.data);
+      }
+    } catch (_err) {
+      // silently fail tab data load
+    } finally {
+      setIsTabLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (id && activeTab !== 'info' && activeTab !== 'contacts' && activeTab !== 'addresses') {
+      fetchTabData(activeTab, id);
+    }
+  }, [activeTab, id, fetchTabData]);
 
   useEffect(() => {
     fetchPartnerDetails();
@@ -503,25 +596,114 @@ export const PartnerDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Live Partner Summary Metrics */}
+        <div className="mt-4 pt-4 border-t border-app-border">
+          {partner.partner_type === 'SUPPLIER' ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Commandes Achat</span>
+                <span className="text-base font-bold text-app-text-primary">
+                  {summary?.supplier?.total_purchases ?? tabPurchases.length ?? 0}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Bons Réception</span>
+                <span className="text-base font-bold text-pesage-blue">
+                  {summary?.supplier?.total_receipts ?? tabReceipts.length ?? 0}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Factures Achat</span>
+                <span className="text-base font-bold text-app-text-primary">
+                  {summary?.supplier?.total_invoices ?? tabSupplierInvoices.length ?? 0}
+                </span>
+                <span className="text-[10px] text-app-text-muted block truncate mt-0.5">
+                  {formatCurrency(summary?.supplier?.amount_invoiced ?? 0)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Total Réglé</span>
+                <span className="text-base font-bold text-emerald-600">
+                  {formatCurrency(summary?.supplier?.amount_paid ?? 0)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Restant Dû</span>
+                <span className="text-base font-bold text-rose-600">
+                  {formatCurrency(summary?.supplier?.amount_due ?? 0)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Règlements</span>
+                <span className="text-base font-bold text-indigo-600">
+                  {summary?.supplier?.total_payments ?? tabSupplierPayments.length ?? 0}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Devis Émis</span>
+                <span className="text-base font-bold text-app-text-primary">
+                  {summary?.customer?.total_quotes ?? tabQuotes.length ?? 0}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Ventes Validées</span>
+                <span className="text-base font-bold text-pesage-blue">
+                  {summary?.customer?.total_sales ?? tabSales.length ?? 0}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Factures Client</span>
+                <span className="text-base font-bold text-app-text-primary">
+                  {summary?.customer?.total_invoices ?? tabInvoices.length ?? 0}
+                </span>
+                <span className="text-[10px] text-app-text-muted block truncate mt-0.5">
+                  {formatCurrency(summary?.customer?.amount_invoiced ?? 0)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Total Encaissé</span>
+                <span className="text-base font-bold text-emerald-600">
+                  {formatCurrency(summary?.customer?.amount_paid ?? 0)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Reste à Recouvrer</span>
+                <span className="text-base font-bold text-rose-600">
+                  {formatCurrency(summary?.customer?.amount_due ?? 0)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-app-surface-subtle/60 border border-app-border">
+                <span className="text-[10px] text-app-text-muted block font-medium">Interventions</span>
+                <span className="text-base font-bold text-amber-600">
+                  {summary?.customer?.total_interventions ?? tabInterventions.length ?? 0}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tabs Navigation */}
       <div className="flex items-center gap-1.5 overflow-x-auto border-b border-app-border pb-1">
         <button
           onClick={() => setActiveTab('info')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
             activeTab === 'info'
               ? 'bg-pesage-blue text-white shadow-xs'
               : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
           }`}
         >
           <Building2 className="w-3.5 h-3.5" />
-          Informations
+          Vue d'ensemble
         </button>
 
         <button
           onClick={() => setActiveTab('contacts')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
             activeTab === 'contacts'
               ? 'bg-pesage-blue text-white shadow-xs'
               : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
@@ -533,7 +715,7 @@ export const PartnerDetailPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('addresses')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
             activeTab === 'addresses'
               ? 'bg-pesage-blue text-white shadow-xs'
               : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
@@ -543,84 +725,162 @@ export const PartnerDetailPage: React.FC = () => {
           Adresses ({addresses.length})
         </button>
 
-        <button
-          onClick={() => setActiveTab('quotes')}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-            activeTab === 'quotes'
-              ? 'bg-pesage-blue text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <FileText className="w-3.5 h-3.5" />
-          Devis
-        </button>
+        {partner.partner_type === 'SUPPLIER' ? (
+          <>
+            <button
+              onClick={() => setActiveTab('purchases')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'purchases'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              Commandes d'Achat
+            </button>
 
-        <button
-          onClick={() => setActiveTab('sales')}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-            activeTab === 'sales'
-              ? 'bg-pesage-blue text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <ShoppingCart className="w-3.5 h-3.5" />
-          Ventes
-        </button>
+            <button
+              onClick={() => setActiveTab('receipts')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'receipts'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              Réceptions
+            </button>
 
-        <button
-          onClick={() => setActiveTab('deliveries')}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-            activeTab === 'deliveries'
-              ? 'bg-pesage-blue text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Truck className="w-3.5 h-3.5" />
-          Bons de Livraison
-        </button>
+            <button
+              onClick={() => setActiveTab('supplier_invoices')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'supplier_invoices'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              Factures Achat
+            </button>
 
-        <button
-          onClick={() => setActiveTab('invoices')}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-            activeTab === 'invoices'
-              ? 'bg-pesage-blue text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <CreditCard className="w-3.5 h-3.5" />
-          Factures
-        </button>
+            <button
+              onClick={() => setActiveTab('supplier_payments')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'supplier_payments'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              Règlements
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setActiveTab('quotes')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'quotes'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Devis
+            </button>
 
-        <button
-          onClick={() => setActiveTab('interventions')}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-            activeTab === 'interventions'
-              ? 'bg-pesage-blue text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Wrench className="w-3.5 h-3.5" />
-          Interventions
-        </button>
+            <button
+              onClick={() => setActiveTab('sales')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'sales'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              Ventes
+            </button>
+
+            <button
+              onClick={() => setActiveTab('deliveries')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'deliveries'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              Bons de Livraison
+            </button>
+
+            <button
+              onClick={() => setActiveTab('invoices')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'invoices'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              Factures Vente
+            </button>
+
+            <button
+              onClick={() => setActiveTab('credit_notes')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'credit_notes'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Avoirs Clients
+            </button>
+
+            <button
+              onClick={() => setActiveTab('payments')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'payments'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              Règlements Client
+            </button>
+
+            <button
+              onClick={() => setActiveTab('interventions')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'interventions'
+                  ? 'bg-pesage-blue text-white shadow-xs'
+                  : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
+              }`}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              Interventions
+            </button>
+          </>
+        )}
 
         <button
           onClick={() => setActiveTab('documents')}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
             activeTab === 'documents'
               ? 'bg-pesage-blue text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+              : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
           }`}
         >
           <FolderArchive className="w-3.5 h-3.5" />
-          Documents
+          Documents & Pièces
         </button>
 
         <button
           onClick={() => setActiveTab('analytics')}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
             activeTab === 'analytics'
               ? 'bg-pesage-blue text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+              : 'text-app-text-muted hover:text-app-text hover:bg-slate-100'
           }`}
         >
           <BarChart3 className="w-3.5 h-3.5" />
@@ -909,16 +1169,810 @@ export const PartnerDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Future Tabs Placeholders */}
-      {activeTab !== 'info' && activeTab !== 'contacts' && activeTab !== 'addresses' && (
-        <div className="p-10 rounded-2xl bg-app-surface border border-app-border text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
-            <Info className="w-6 h-6" />
+      {/* Tab Content: Quotes (Devis) */}
+      {activeTab === 'quotes' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Devis Commercial</h3>
+              <p className="text-xs text-app-text-muted">Propositions commerciales adressées à {partner.legal_name}</p>
+            </div>
+            <button
+              onClick={() => navigate('/devis')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Devis
+            </button>
           </div>
-          <h3 className="text-base font-bold text-app-text">Module non disponible pour le moment</h3>
-          <p className="text-xs text-app-text-muted max-w-md mx-auto">
-            Ce module commercial ou technique sera relié à cette fiche partenaire lors des prochaines phases du système ERP Pesage 2000.
-          </p>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabQuotes.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucun devis trouvé pour ce client.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Validité</th>
+                    <th className="px-4 py-3 text-left font-semibold">Délai Livr.</th>
+                    <th className="px-4 py-3 text-left font-semibold">Délai Réal.</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total HT</th>
+                    <th className="px-4 py-3 text-right font-semibold">TTC</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabQuotes.map((q: any) => (
+                    <tr key={q.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-pesage-blue">{q.reference}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(q.created_at)}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{q.valid_until ? formatDate(q.valid_until) : '—'}</td>
+                      <td className="px-4 py-3 text-app-text">{q.delivery_delay || '—'}</td>
+                      <td className="px-4 py-3 text-app-text">{q.realization_delay || '—'}</td>
+                      <td className="px-4 py-3 text-right text-app-text-muted">{q.total_ht != null ? formatCurrency(q.total_ht) : '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-app-text-primary">{q.total_ttc != null ? formatCurrency(q.total_ttc) : '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          q.status === 'ACCEPTED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          q.status === 'SENT' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          q.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                          q.status === 'EXPIRED' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>{q.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/devis?search=${encodeURIComponent(q.reference)}`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Sales (Ventes) */}
+      {activeTab === 'sales' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Commandes Ventes</h3>
+              <p className="text-xs text-app-text-muted">Commandes et ventes confirmées pour {partner.legal_name}</p>
+            </div>
+            <button
+              onClick={() => navigate('/ventes')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Ventes
+            </button>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabSales.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <ShoppingCart className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucune vente trouvée pour ce client.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total HT</th>
+                    <th className="px-4 py-3 text-right font-semibold">TVA</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total TTC</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabSales.map((s: any) => (
+                    <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-pesage-blue">{s.reference}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(s.created_at)}</td>
+                      <td className="px-4 py-3 text-right text-app-text-muted">{s.subtotal_ht != null ? formatCurrency(s.subtotal_ht) : '—'}</td>
+                      <td className="px-4 py-3 text-right text-app-text-muted">{s.tax_amount != null ? formatCurrency(s.tax_amount) : '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-app-text-primary">{s.total_ttc != null ? formatCurrency(s.total_ttc) : '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          s.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          s.status === 'CANCELLED' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>{s.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/ventes?search=${encodeURIComponent(s.reference)}`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Delivery Notes (BL) */}
+      {activeTab === 'deliveries' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Bons de Livraison (BL)</h3>
+              <p className="text-xs text-app-text-muted">Bons d'expédition et livraisons pour {partner.legal_name}</p>
+            </div>
+            <button
+              onClick={() => navigate('/livraisons')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Livraisons
+            </button>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabDeliveries.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <Truck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucun bon de livraison trouvé pour ce client.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence BL</th>
+                    <th className="px-4 py-3 text-left font-semibold">Vente associée</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-left font-semibold">Articles</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabDeliveries.map((bl: any) => (
+                    <tr key={bl.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-pesage-blue">{bl.reference}</td>
+                      <td className="px-4 py-3 font-mono text-app-text-muted">{bl.sale?.reference || '—'}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(bl.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          bl.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          bl.status === 'IN_TRANSIT' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>{bl.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-app-text">
+                        {bl.items ? `${bl.items.length} article(s)` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/livraisons?search=${encodeURIComponent(bl.reference)}`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Customer Invoices */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Factures Vente</h3>
+              <p className="text-xs text-app-text-muted">Facturation émise pour {partner.legal_name}</p>
+            </div>
+            <button
+              onClick={() => navigate('/factures-vente')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Factures Vente
+            </button>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabInvoices.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucune facture émise pour ce client.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Numéro</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Échéance</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total HT</th>
+                    <th className="px-4 py-3 text-right font-semibold">TTC</th>
+                    <th className="px-4 py-3 text-right font-semibold">Payé</th>
+                    <th className="px-4 py-3 text-right font-semibold">Reste</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabInvoices.map((inv: any) => (
+                    <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-pesage-blue">{inv.reference}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(inv.created_at)}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
+                      <td className="px-4 py-3 text-right text-app-text-muted">{inv.total_ht != null ? formatCurrency(inv.total_ht) : '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-app-text-primary">{inv.total_ttc != null ? formatCurrency(inv.total_ttc) : '—'}</td>
+                      <td className="px-4 py-3 text-right text-emerald-600 font-semibold">{inv.amount_paid != null ? formatCurrency(inv.amount_paid) : '0,00 DH'}</td>
+                      <td className={`px-4 py-3 text-right font-bold ${Number(inv.amount_due) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {inv.amount_due != null ? formatCurrency(inv.amount_due) : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          inv.status === 'ISSUED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          inv.status === 'PARTIALLY_PAID' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          inv.status === 'OVERDUE' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                          'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>{inv.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/factures-vente?search=${encodeURIComponent(inv.reference)}`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Credit Notes (Avoirs) */}
+      {activeTab === 'credit_notes' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Avoirs Clients</h3>
+              <p className="text-xs text-app-text-muted">Avoirs émis en déduction pour {partner.legal_name}</p>
+            </div>
+            <button
+              onClick={() => navigate('/avoirs')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Avoirs
+            </button>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabCreditNotes.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <RotateCcw className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucun avoir émis pour ce client.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence Avoir</th>
+                    <th className="px-4 py-3 text-left font-semibold">Facture d'origine</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Motif</th>
+                    <th className="px-4 py-3 text-right font-semibold">Montant TTC</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabCreditNotes.map((cn: any) => (
+                    <tr key={cn.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-purple-600">{cn.reference}</td>
+                      <td className="px-4 py-3 font-mono text-app-text-muted">{cn.invoice?.reference || '—'}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(cn.created_at)}</td>
+                      <td className="px-4 py-3 text-app-text">{cn.reason || '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-purple-700">{cn.amount_ttc != null ? formatCurrency(cn.amount_ttc) : '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          cn.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>{cn.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/avoirs?search=${encodeURIComponent(cn.reference)}`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Payments (Règlements) */}
+      {activeTab === 'payments' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Paiements & Encaissements</h3>
+              <p className="text-xs text-app-text-muted">Règlements encaissés pour {partner.legal_name}</p>
+            </div>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabPayments.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <DollarSign className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucun règlement enregistré pour ce client.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date Règlement</th>
+                    <th className="px-4 py-3 text-right font-semibold">Montant</th>
+                    <th className="px-4 py-3 text-left font-semibold">Mode</th>
+                    <th className="px-4 py-3 text-left font-semibold">Facture Source</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabPayments.map((p: any) => (
+                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-emerald-600">{p.reference || `#${p.id}`}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(p.payment_date || p.created_at)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-emerald-600">{formatCurrency(p.amount || 0)}</td>
+                      <td className="px-4 py-3 text-app-text">{p.payment_method || 'Virement'}</td>
+                      <td className="px-4 py-3 font-mono text-app-text-muted">{p.invoice?.reference || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {p.status || 'VALIDE'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Interventions */}
+      {activeTab === 'interventions' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Interventions SAV & Métrologie</h3>
+              <p className="text-xs text-app-text-muted">Opérations sur site, étalonnages et maintenances pour ce client</p>
+            </div>
+            <button
+              onClick={() => navigate('/maintenance')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Maintenance
+            </button>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabInterventions.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <Wrench className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucune intervention enregistrée pour ce client.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Équipement</th>
+                    <th className="px-4 py-3 text-left font-semibold">Type</th>
+                    <th className="px-4 py-3 text-left font-semibold">Technicien</th>
+                    <th className="px-4 py-3 text-left font-semibold">Priorité</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabInterventions.map((intv: any) => (
+                    <tr key={intv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-pesage-blue">{intv.reference || `#${intv.id}`}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(intv.scheduled_date || intv.created_at)}</td>
+                      <td className="px-4 py-3 text-app-text font-medium">{intv.equipment?.name || intv.equipment_name || '—'}</td>
+                      <td className="px-4 py-3 text-app-text">{intv.intervention_type || intv.type || '—'}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{intv.technician_name || intv.assigned_to?.name || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          intv.priority === 'HIGH' || intv.priority === 'URGENT' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                          'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}>{intv.priority || 'NORMAL'}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          intv.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          intv.status === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          intv.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500 border-slate-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>{intv.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/maintenance`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Supplier Purchases */}
+      {activeTab === 'purchases' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Commandes d'Achat Fournisseur</h3>
+              <p className="text-xs text-app-text-muted">Commandes passées auprès de {partner.legal_name}</p>
+            </div>
+            <button
+              onClick={() => navigate('/achats')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Achats
+            </button>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabPurchases.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucune commande d'achat pour ce fournisseur.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total HT</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total TTC</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabPurchases.map((po: any) => (
+                    <tr key={po.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-pesage-orange">{po.reference}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(po.created_at)}</td>
+                      <td className="px-4 py-3 text-right text-app-text-muted">{po.subtotal_ht != null ? formatCurrency(po.subtotal_ht) : '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-app-text-primary">{po.total_ttc != null ? formatCurrency(po.total_ttc) : '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          po.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          po.status === 'RECEIVED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>{po.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/achats`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Supplier Receipts */}
+      {activeTab === 'receipts' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Bons de Réception Magasin</h3>
+              <p className="text-xs text-app-text-muted">Réceptions de marchandises pour {partner.legal_name}</p>
+            </div>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabReceipts.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <Truck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucun bon de réception trouvé pour ce fournisseur.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence Réception</th>
+                    <th className="px-4 py-3 text-left font-semibold">Commande Achat</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Dépôt Récepteur</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabReceipts.map((rc: any) => (
+                    <tr key={rc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-emerald-600">{rc.reference}</td>
+                      <td className="px-4 py-3 font-mono text-app-text-muted">{rc.purchase_order?.reference || rc.purchase_order_id || '—'}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(rc.created_at)}</td>
+                      <td className="px-4 py-3 text-app-text">{rc.warehouse?.name || 'Dépôt Principal'}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {rc.status || 'VALIDE'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Supplier Invoices */}
+      {activeTab === 'supplier_invoices' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Factures Achat Fournisseur</h3>
+              <p className="text-xs text-app-text-muted">Factures reçues et échéances de paiement</p>
+            </div>
+            <button
+              onClick={() => navigate('/factures-achat')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Module Factures Achat
+            </button>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabSupplierInvoices.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucune facture d'achat pour ce fournisseur.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Numéro</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">Échéance</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total HT</th>
+                    <th className="px-4 py-3 text-right font-semibold">TTC</th>
+                    <th className="px-4 py-3 text-right font-semibold">Payé</th>
+                    <th className="px-4 py-3 text-right font-semibold">Reste</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                    <th className="px-4 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabSupplierInvoices.map((inv: any) => (
+                    <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-pesage-orange">{inv.reference}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(inv.created_at)}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
+                      <td className="px-4 py-3 text-right text-app-text-muted">{inv.total_ht != null ? formatCurrency(inv.total_ht) : '—'}</td>
+                      <td className="px-4 py-3 text-right font-bold text-app-text-primary">{inv.total_ttc != null ? formatCurrency(inv.total_ttc) : '—'}</td>
+                      <td className="px-4 py-3 text-right text-emerald-600 font-semibold">{inv.amount_paid != null ? formatCurrency(inv.amount_paid) : '0,00 DH'}</td>
+                      <td className={`px-4 py-3 text-right font-bold ${Number(inv.amount_due) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {inv.amount_due != null ? formatCurrency(inv.amount_due) : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          inv.status === 'ISSUED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          inv.status === 'PARTIALLY_PAID' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>{inv.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/factures-achat?search=${encodeURIComponent(inv.reference)}`)}
+                          className="text-xs text-pesage-blue hover:underline font-semibold"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Supplier Payments */}
+      {activeTab === 'supplier_payments' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-app-text">Règlements Fournisseur</h3>
+              <p className="text-xs text-app-text-muted">Paiements émis à l'ordre de {partner.legal_name}</p>
+            </div>
+          </div>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Chargement...</div>
+          ) : tabSupplierPayments.length === 0 ? (
+            <div className="p-8 text-center bg-app-surface rounded-2xl border border-app-border">
+              <DollarSign className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-app-text-muted">Aucun règlement enregistré pour ce fournisseur.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-app-border">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/40 text-app-text-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Référence</th>
+                    <th className="px-4 py-3 text-left font-semibold">Date Règlement</th>
+                    <th className="px-4 py-3 text-right font-semibold">Montant</th>
+                    <th className="px-4 py-3 text-left font-semibold">Mode de Paiement</th>
+                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border bg-app-surface">
+                  {tabSupplierPayments.map((p: any) => (
+                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-indigo-600">{p.reference || `#${p.id}`}</td>
+                      <td className="px-4 py-3 text-app-text-muted">{formatDate(p.payment_date || p.created_at)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatCurrency(p.amount || 0)}</td>
+                      <td className="px-4 py-3 text-app-text">{p.payment_method || 'Virement'}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {p.status || 'VALIDE'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content: Documents & Attachments */}
+      {activeTab === 'documents' && (
+        <AttachmentsSection
+          entityType={partner.partner_type === 'SUPPLIER' ? 'SUPPLIER' : 'CUSTOMER'}
+          entityId={partner.id}
+          title={`Documents & Justificatifs — ${partner.legal_name}`}
+          subtitle="Contrats, certificats, rapports techniques, bons signés et pièces comptables"
+        />
+      )}
+
+      {/* Tab Content: Analytics & KPI */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-app-text">
+            {partner.partner_type === 'SUPPLIER' ? 'Analyse & KPI Fournisseur' : 'Analyse & KPI Client'}
+          </h3>
+          {isTabLoading ? (
+            <div className="p-8 text-center text-xs text-app-text-muted"><Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />Calcul des indicateurs...</div>
+          ) : partner.partner_type === 'SUPPLIER' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Commandes d'Achat</span>
+                <p className="text-2xl font-bold text-app-text-primary">{summary?.supplier?.total_purchases ?? tabPurchases.length ?? 0}</p>
+                <p className="text-[11px] text-pesage-blue">{summary?.supplier?.total_receipts ?? tabReceipts.length ?? 0} réceptions</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Factures Achat Émises</span>
+                <p className="text-2xl font-bold text-pesage-orange">{summary?.supplier?.total_invoices ?? tabSupplierInvoices.length ?? 0}</p>
+                <p className="text-[11px] text-app-text-muted">Total factures reçues</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Volume d'Achats Facturé</span>
+                <p className="text-xl font-bold text-emerald-600">
+                  {formatCurrency(summary?.supplier?.amount_invoiced ?? 0)}
+                </p>
+                <p className="text-[11px] text-app-text-muted">Toutes factures confondues</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Reste Dû Fournisseur</span>
+                <p className="text-xl font-bold text-rose-600">
+                  {formatCurrency(summary?.supplier?.amount_due ?? 0)}
+                </p>
+                <p className="text-[11px] text-emerald-600">{formatCurrency(summary?.supplier?.amount_paid ?? 0)} déjà réglé</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Devis Envoyés</span>
+                <p className="text-2xl font-bold text-app-text-primary">{summary?.customer?.total_quotes ?? tabQuotes.length ?? 0}</p>
+                <p className="text-[11px] text-emerald-600">
+                  {tabQuotes.filter((q: any) => q.status === 'ACCEPTED').length} acceptés
+                </p>
+              </div>
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Ventes Confirmées</span>
+                <p className="text-2xl font-bold text-pesage-blue">{summary?.customer?.total_sales ?? tabSales.length ?? 0}</p>
+                <p className="text-[11px] text-app-text-muted">
+                  {summary?.customer?.total_delivery_notes ?? tabDeliveries.length ?? 0} BL livrés
+                </p>
+              </div>
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Total Facturé Client</span>
+                <p className="text-xl font-bold text-emerald-600">
+                  {formatCurrency(summary?.customer?.amount_invoiced ?? 0)}
+                </p>
+                <p className="text-[11px] text-app-text-muted">{summary?.customer?.total_invoices ?? tabInvoices.length ?? 0} facture(s)</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-app-surface border border-app-border shadow-sm space-y-1">
+                <span className="text-[11px] text-app-text-muted block">Reste à Recouvrer (Dû)</span>
+                <p className="text-xl font-bold text-rose-600">
+                  {formatCurrency(summary?.customer?.amount_due ?? 0)}
+                </p>
+                <p className="text-[11px] text-emerald-600">{formatCurrency(summary?.customer?.amount_paid ?? 0)} déjà encaissé</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1075,14 +2129,14 @@ export const PartnerDetailPage: React.FC = () => {
               type="button"
               disabled={isSubmitting}
               onClick={() => setIsEditPartnerOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-app-text-muted hover:bg-slate-100 transition-colors"
+              className="btn-secondary text-xs px-4 py-2"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+              className="btn-primary text-xs px-5 py-2 inline-flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Enregistrer
@@ -1184,14 +2238,14 @@ export const PartnerDetailPage: React.FC = () => {
               type="button"
               disabled={isSubmitting}
               onClick={() => setIsContactModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-app-text-muted hover:bg-slate-100 transition-colors"
+              className="btn-secondary text-xs px-4 py-2"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+              className="btn-primary text-xs px-5 py-2 inline-flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {editingContact ? 'Enregistrer' : 'Ajouter le contact'}
@@ -1296,14 +2350,14 @@ export const PartnerDetailPage: React.FC = () => {
               type="button"
               disabled={isSubmitting}
               onClick={() => setIsAddressModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-app-text-muted hover:bg-slate-100 transition-colors"
+              className="btn-secondary text-xs px-4 py-2"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm transition-all"
+              className="btn-primary text-xs px-5 py-2 inline-flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {editingAddress ? 'Enregistrer' : 'Ajouter l\'adresse'}

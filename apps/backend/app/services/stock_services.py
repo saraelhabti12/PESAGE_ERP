@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_, case
 from sqlalchemy.orm import Session, selectinload
 from fastapi import HTTPException, status
 
@@ -569,31 +569,18 @@ class StockService:
     @classmethod
     def process_purchase_receipt(cls, db: Session, receipt: PurchaseReceipt, user_id: int) -> None:
         """Called upon purchase receipt creation/confirmation to increase stock atomically."""
-        # Find default fallback warehouse if receipt item doesn't specify one
-        default_wh = (
-            db.query(Warehouse)
-            .filter(Warehouse.is_active == True)
-            .order_by(Warehouse.type == WarehouseType.MAIN, Warehouse.id.asc())
-            .first()
-        )
-        if not default_wh:
-            # Create default main warehouse if none exists
-            default_wh = Warehouse(
-                code="MAG-001",
-                name="Dépôt Principal",
-                type=WarehouseType.MAIN,
-                description="Dépôt principal initialisé automatiquement",
-                is_active=True,
-            )
-            db.add(default_wh)
-            db.flush()
-
         for item in receipt.items:
             product = db.query(Product).filter(Product.id == item.product_id).first()
             if not product or not product.track_stock:
                 continue
 
-            target_wh_id = item.warehouse_id or default_wh.id
+            target_wh_id = item.warehouse_id or receipt.warehouse_id
+            if not target_wh_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Veuillez sélectionner le dépôt de réception.",
+                )
+
             cls.add_stock(
                 db=db,
                 product_id=product.id,
@@ -743,32 +730,123 @@ class StockService:
         return result, total
 
     @staticmethod
-    def get_stock_stats(db: Session) -> dict:
-        balances = (
-            db.query(StockBalance)
-            .join(StockBalance.product)
-            .filter(Product.is_active == True, Product.track_stock == True)
-            .all()
+    def get_stock_stats(db: Session, warehouse_id: Optional[int] = None) -> dict:
+        # 1. Total managed active products count (pure product count)
+        managed_count = (
+            db.query(func.count(Product.id))
+            .filter(Product.track_stock == True, Product.is_active == True)
+            .scalar()
+            or 0
         )
 
-        total_value = sum(
-            float(b.quantity) * (float(b.product.purchase_price) if b.product and b.product.purchase_price else 0.0)
-            for b in balances
-        )
-        total_qty = sum(float(b.quantity) for b in balances)
-        tracked_count = db.query(Product).filter(Product.track_stock == True, Product.is_active == True).count()
+        # 2. Build subquery for product-level aggregated stock
+        join_cond = [StockBalance.product_id == Product.id]
+        if warehouse_id is not None:
+            join_cond.append(StockBalance.warehouse_id == warehouse_id)
 
-        out_of_stock = sum(1 for b in balances if b.status == "OUT_OF_STOCK")
-        low_stock = sum(1 for b in balances if b.status == "LOW")
-        overstock = sum(1 for b in balances if b.status == "OVERSTOCK")
+        qty_expr = func.coalesce(func.sum(StockBalance.quantity), 0.0)
+        reserved_expr = func.coalesce(func.sum(StockBalance.reserved_quantity), 0.0)
+        min_qty_expr = func.coalesce(func.sum(StockBalance.minimum_quantity), 0.0)
+        max_qty_expr = func.sum(StockBalance.maximum_quantity)
+
+        product_stock_subquery = (
+            db.query(
+                Product.id.label("product_id"),
+                Product.purchase_price.label("purchase_price"),
+                qty_expr.label("quantity"),
+                reserved_expr.label("reserved_quantity"),
+                min_qty_expr.label("min_quantity"),
+                max_qty_expr.label("max_quantity"),
+            )
+            .outerjoin(StockBalance, and_(*join_cond))
+            .filter(Product.track_stock == True, Product.is_active == True)
+            .group_by(Product.id, Product.purchase_price)
+            .subquery()
+        )
+
+        avail_col = func.greatest(
+            0.0,
+            product_stock_subquery.c.quantity - product_stock_subquery.c.reserved_quantity,
+        )
+
+        agg_query = db.query(
+            func.coalesce(func.sum(product_stock_subquery.c.quantity), 0.0).label("total_quantity"),
+            func.coalesce(
+                func.sum(product_stock_subquery.c.quantity * product_stock_subquery.c.purchase_price),
+                0.0,
+            ).label("total_value_ht"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (avail_col == 0.0, 1),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("out_of_stock"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                avail_col > 0.0,
+                                avail_col <= product_stock_subquery.c.min_quantity,
+                                product_stock_subquery.c.min_quantity > 0.0,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("low_stock"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                product_stock_subquery.c.max_quantity.isnot(None),
+                                product_stock_subquery.c.max_quantity > 0.0,
+                                avail_col > product_stock_subquery.c.max_quantity,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("overstock"),
+        ).first()
+
+        total_quantity = float(agg_query[0]) if agg_query and agg_query[0] is not None else 0.0
+        total_value_ht = float(agg_query[1]) if agg_query and agg_query[1] is not None else 0.0
+        out_of_stock = int(agg_query[2]) if agg_query and agg_query[2] is not None else 0
+        low_stock = int(agg_query[3]) if agg_query and agg_query[3] is not None else 0
+        overstock = int(agg_query[4]) if agg_query and agg_query[4] is not None else 0
+
+        # Active warehouses & movements
+        active_warehouses = db.query(func.count(Warehouse.id)).filter(Warehouse.is_active == True).scalar() or 0
+        movement_count = db.query(func.count(StockMovement.id)).scalar() or 0
+
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        movements_today = db.query(func.count(StockMovement.id)).filter(StockMovement.created_at >= today_start).scalar() or 0
 
         return {
-            "total_stock_value": round(total_value, 2),
-            "tracked_products_count": tracked_count,
-            "out_of_stock_count": out_of_stock,
+            "managed_products": managed_count,
+            "total_tracked_products": managed_count,
+            "tracked_products_count": managed_count,
+            "total_quantity": round(total_quantity, 2),
+            "total_value_ht": round(total_value_ht, 2),
+            "total_stock_value": round(total_value_ht, 2),
+            "low_stock": low_stock,
             "low_stock_count": low_stock,
+            "out_of_stock": out_of_stock,
+            "out_of_stock_count": out_of_stock,
+            "overstock": overstock,
             "overstock_count": overstock,
-            "total_quantity": round(total_qty, 2),
+            "active_warehouses": active_warehouses,
+            "movement_count": movement_count,
+            "total_movements_today": movements_today,
         }
 
     @staticmethod

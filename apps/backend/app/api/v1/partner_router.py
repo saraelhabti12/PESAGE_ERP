@@ -17,7 +17,7 @@ from app.schemas.partner_schemas import (
     PartnerTypeEnum,
     PartnerUpdate,
 )
-from app.security.deps import require_permission
+from app.security.deps import require_any_permission, require_permission
 from app.services.partner_services import PartnerService
 
 router = APIRouter(tags=["Partners, Customers & Suppliers"])
@@ -27,22 +27,39 @@ router = APIRouter(tags=["Partners, Customers & Suppliers"])
 # BUSINESS PARTNERS
 # ----------------------------------------------------
 @router.get(
-    "/partners",
-    response_model=List[PartnerResponse],
+    "/partners/next-code",
+    response_model=dict,
     status_code=status.HTTP_200_OK,
     dependencies=[Depends(require_permission("partners.view"))],
 )
+def get_next_partner_code(
+    partner_type: PartnerTypeEnum = Query(PartnerTypeEnum.CUSTOMER),
+    db: Session = Depends(get_db),
+):
+    """Generates the next sequential partner code preview."""
+    next_code = PartnerService.generate_partner_code(db, partner_type)
+    return {"code": next_code}
+
+
+@router.get(
+    "/partners",
+    response_model=List[PartnerResponse],
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_any_permission("partners.view", "customers.view", "suppliers.view", "quotes.view", "sales.view", "purchases.view", "invoices.view", "tickets.view"))],
+)
 def get_partners(
     page: int = Query(1, ge=1),
-    size: int = Query(50, ge=1, le=500),
+    size: int = Query(200, ge=1, le=1000),
     search: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     type: Optional[PartnerTypeEnum] = Query(None),
+    partner_type: Optional[PartnerTypeEnum] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Lists business partners with optional search, type, and status filtering."""
+    effective_type = type or partner_type
     items, _ = PartnerService.get_partners(
-        db, page=page, size=size, search=search, is_active=is_active, partner_type=type
+        db, page=page, size=size, search=search, is_active=is_active, partner_type=effective_type
     )
     return items
 
@@ -59,6 +76,20 @@ def get_partner(
 ):
     """Retrieves detailed partner profile with contacts and addresses."""
     return PartnerService.get_partner_by_id(db, partner_id)
+
+
+@router.get(
+    "/partners/{partner_id}/summary",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("partners.view"))],
+)
+def get_partner_summary(
+    partner_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieves comprehensive real-time aggregated metrics for a customer or supplier."""
+    return PartnerService.get_partner_summary(db, partner_id)
 
 
 @router.post(
@@ -111,11 +142,11 @@ def delete_partner(
     "/customers",
     response_model=List[PartnerResponse],
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_permission("customers.view"))],
+    dependencies=[Depends(require_any_permission("customers.view", "partners.view", "quotes.view", "sales.view", "invoices.view", "tickets.view"))],
 )
 def get_customers(
     page: int = Query(1, ge=1),
-    size: int = Query(50, ge=1, le=500),
+    size: int = Query(200, ge=1, le=1000),
     search: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
@@ -131,7 +162,7 @@ def get_customers(
     "/customers/{partner_id}",
     response_model=PartnerDetailResponse,
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_permission("customers.view"))],
+    dependencies=[Depends(require_any_permission("customers.view", "partners.view", "quotes.view", "sales.view", "invoices.view", "tickets.view"))],
 )
 def get_customer(
     partner_id: int,
@@ -152,11 +183,11 @@ def get_customer(
     "/suppliers",
     response_model=List[PartnerResponse],
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_permission("suppliers.view"))],
+    dependencies=[Depends(require_any_permission("suppliers.view", "partners.view", "purchases.view", "invoices.view"))],
 )
 def get_suppliers(
     page: int = Query(1, ge=1),
-    size: int = Query(50, ge=1, le=500),
+    size: int = Query(200, ge=1, le=1000),
     search: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     db: Session = Depends(get_db),

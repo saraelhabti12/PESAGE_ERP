@@ -87,7 +87,7 @@ class PartnerAddressResponse(PartnerAddressBase):
 
 # --- Business Partner Schemas ---
 class PartnerBase(BaseModel):
-    code: str = Field(..., min_length=1, max_length=50)
+    code: Optional[str] = Field(None, max_length=50)
     legal_name: str = Field(..., min_length=1, max_length=255)
     trade_name: Optional[str] = Field(None, max_length=255)
     partner_type: PartnerTypeEnum = PartnerTypeEnum.CUSTOMER
@@ -141,3 +141,35 @@ class PartnerDetailResponse(PartnerResponse):
     addresses: List[PartnerAddressResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PartnerSummaryResponse(BaseModel):
+    partner_id: int
+    partner_type: str
+    # Customer metrics
+    total_quotes: int = 0
+    total_sales: int = 0
+    total_sales_ttc: float = 0.0
+    total_invoices: int = 0
+    total_invoiced_ttc: float = 0.0
+    amount_paid: float = 0.0
+    amount_due: float = 0.0
+    total_delivery_notes: int = 0
+    total_credit_notes: int = 0
+    total_credit_notes_amount: float = 0.0
+    total_interventions: int = 0
+    total_equipments: int = 0
+    # Supplier metrics
+    total_purchases: int = 0
+    total_purchases_ttc: float = 0.0
+    total_supplier_invoices: int = 0
+    total_supplier_invoiced_ttc: float = 0.0
+    supplier_amount_paid: float = 0.0
+    supplier_amount_due: float = 0.0
+    total_receipts: int = 0
+    total_payments: int = 0
+    total_documents: int = 0
+    last_transaction_date: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+

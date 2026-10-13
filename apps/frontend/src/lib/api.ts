@@ -49,18 +49,24 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Do not attempt refresh on auth endpoints (login/register/refresh)
+    // Do not attempt refresh on auth endpoints (login/register/refresh/me/logout) or when originalRequest is missing
     if (
       error.response?.status === 401 &&
+      originalRequest &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/api/v1/auth/login') &&
-      !originalRequest.url?.includes('/api/v1/auth/refresh')
+      !originalRequest.url?.includes('/api/v1/auth/')
     ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({
             resolve: (token: string) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
+              if (originalRequest.headers) {
+                if (typeof originalRequest.headers.set === 'function') {
+                  originalRequest.headers.set('Authorization', `Bearer ${token}`);
+                } else {
+                  originalRequest.headers.Authorization = `Bearer ${token}`;
+                }
+              }
               resolve(api(originalRequest));
             },
             reject: (err: unknown) => {
@@ -77,6 +83,7 @@ api.interceptors.response.use(
 
       if (!refreshToken) {
         isRefreshing = false;
+        processQueue(error, null);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         window.dispatchEvent(new Event('auth:unauthorized'));
@@ -92,8 +99,13 @@ api.interceptors.response.use(
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);
 
-        api.defaults.headers.common.Authorization = `Bearer ${data.access_token}`;
-        originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
+        if (originalRequest.headers) {
+          if (typeof originalRequest.headers.set === 'function') {
+            originalRequest.headers.set('Authorization', `Bearer ${data.access_token}`);
+          } else {
+            originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
+          }
+        }
 
         processQueue(null, data.access_token);
         isRefreshing = false;

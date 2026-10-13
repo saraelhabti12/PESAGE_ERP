@@ -141,6 +141,7 @@ class PurchaseReceipt(Base):
     )
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    warehouse_id: Mapped[Optional[int]] = mapped_column(ForeignKey("warehouses.id"), nullable=True, index=True)
     received_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     
     created_at: Mapped[datetime] = mapped_column(
@@ -158,6 +159,7 @@ class PurchaseReceipt(Base):
     # Relationships
     purchase_order: Mapped["PurchaseOrder"] = relationship("PurchaseOrder", back_populates="receipts")
     receiver: Mapped["User"] = relationship("User", lazy="joined")
+    warehouse = relationship("Warehouse", lazy="joined")
     items: Mapped[List["PurchaseReceiptItem"]] = relationship(
         "PurchaseReceiptItem",
         back_populates="receipt",

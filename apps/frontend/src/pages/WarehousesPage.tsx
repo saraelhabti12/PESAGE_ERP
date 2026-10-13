@@ -432,18 +432,18 @@ export const WarehousesPage: React.FC = () => {
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-app-border">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  className="btn-secondary text-sm px-4 py-2"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm"
+                  className="btn-primary text-sm px-4 py-2"
                 >
                   {isSaving ? 'Enregistrement...' : editingWarehouse ? 'Mettre à jour' : 'Créer le Dépôt'}
                 </button>
@@ -488,7 +488,7 @@ export const WarehousesPage: React.FC = () => {
                 type="button"
                 onClick={() => setTogglingWarehouse(null)}
                 disabled={isToggling}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                className="btn-secondary text-sm px-4 py-2"
               >
                 Annuler
               </button>
@@ -496,11 +496,7 @@ export const WarehousesPage: React.FC = () => {
                 type="button"
                 onClick={handleConfirmToggleActive}
                 disabled={isToggling}
-                className={`px-4 py-2 text-white text-sm font-semibold rounded-xl transition-all shadow-sm ${
-                  togglingWarehouse.is_active
-                    ? 'bg-rose-600 hover:bg-rose-700'
-                    : 'bg-emerald-600 hover:bg-emerald-700'
-                }`}
+                className={`${togglingWarehouse.is_active ? 'btn-danger' : 'btn-success'} text-sm px-4 py-2`}
               >
                 {isToggling
                   ? 'Traitement...'

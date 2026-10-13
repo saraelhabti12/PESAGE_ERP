@@ -198,16 +198,24 @@ def test_notifications_crud_and_events(client: TestClient):
     assert r_read.json()["is_read"] is True
 
     # Record receipt -> triggers second notification
+    wh = client.post(
+        "/api/v1/warehouses",
+        json={"code": "WH-NOTIF-01", "name": "Dépôt Notif", "type": "MAIN"},
+        headers=headers,
+    ).json()
+
     item_id = po["items"][0]["id"]
-    client.post(
+    r_rec = client.post(
         "/api/v1/purchase-receipts",
         json={
             "reference": "REC-NOTIF-01",
             "purchase_order_id": po["id"],
+            "warehouse_id": wh["id"],
             "items": [{"purchase_order_item_id": item_id, "product_id": prod["id"], "quantity_received": 2}],
         },
         headers=headers,
     )
+    assert r_rec.status_code == 201
 
     # Mark all as read
     r_read_all = client.post("/api/v1/notifications/read-all", headers=headers)

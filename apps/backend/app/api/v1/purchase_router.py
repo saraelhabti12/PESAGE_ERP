@@ -159,6 +159,7 @@ def get_receipts(
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
     purchase_order_id: Optional[int] = Query(None),
+    supplier_id: Optional[int] = Query(None),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
@@ -169,6 +170,7 @@ def get_receipts(
     receipts, total = PurchaseReceiptService.list_receipts(
         db=db,
         purchase_order_id=purchase_order_id,
+        supplier_id=supplier_id,
         start_date=start_date,
         end_date=end_date,
         skip=skip,

@@ -11,6 +11,7 @@ interface PageHeaderProps {
     onClick: () => void;
     icon?: LucideIcon;
   };
+  actions?: React.ReactNode;
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({
@@ -19,6 +20,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   description,
   icon: Icon,
   action,
+  actions,
 }) => {
   const ActionIcon = action?.icon;
   const displaySubtitle = subtitle || description;
@@ -41,7 +43,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         </div>
       </div>
 
-      {action && (
+      {actions ? (
+        <div className="flex items-center space-x-2 shrink-0">{actions}</div>
+      ) : action ? (
         <button
           onClick={action.onClick}
           className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white text-xs font-bold transition-all shadow-md shadow-pesage-blue/20 shrink-0"
@@ -49,7 +53,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           {ActionIcon && <ActionIcon className="w-4 h-4" />}
           <span>{action.label}</span>
         </button>
-      )}
+      ) : null}
     </div>
   );
 };

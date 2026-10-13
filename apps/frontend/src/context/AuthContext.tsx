@@ -15,18 +15,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  const clearAuth = useCallback(() => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    setUser(null);
+    setIsAuthenticated(false);
+  }, []);
+
   const fetchCurrentUser = useCallback(async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      delete api.defaults.headers.common['Authorization'];
-      setUser(null);
-      setIsAuthenticated(false);
+      clearAuth();
       setIsLoading(false);
       return;
     }
 
     try {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       const response = await api.get<User>('/api/v1/auth/me', {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -35,30 +39,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(response.data);
       setIsAuthenticated(true);
     } catch {
-      delete api.defaults.headers.common['Authorization'];
-      setUser(null);
-      setIsAuthenticated(false);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      clearAuth();
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [clearAuth]);
 
   useEffect(() => {
     fetchCurrentUser();
 
     const handleUnauthorized = () => {
-      delete api.defaults.headers.common['Authorization'];
-      setUser(null);
-      setIsAuthenticated(false);
+      clearAuth();
+      setIsLoading(false);
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
     return () => {
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
     };
-  }, [fetchCurrentUser]);
+  }, [fetchCurrentUser, clearAuth]);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
@@ -71,7 +70,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { access_token, refresh_token } = response.data;
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('refresh_token', refresh_token);
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
       const meResponse = await api.get<User>('/api/v1/auth/me', {
         headers: {
@@ -81,11 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(meResponse.data);
       setIsAuthenticated(true);
     } catch (error) {
-      delete api.defaults.headers.common['Authorization'];
-      setUser(null);
-      setIsAuthenticated(false);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      clearAuth();
       throw error;
     } finally {
       setIsLoading(false);
@@ -102,11 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // Ignore logout request errors and proceed with client state cleanup
     } finally {
-      delete api.defaults.headers.common['Authorization'];
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      setUser(null);
-      setIsAuthenticated(false);
+      clearAuth();
       setIsLoading(false);
     }
   };

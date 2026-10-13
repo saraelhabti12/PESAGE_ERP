@@ -217,7 +217,7 @@ export const UnitsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsCreateOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              className="btn-secondary text-xs px-4 py-2"
             >
               Annuler
             </button>
@@ -225,7 +225,7 @@ export const UnitsPage: React.FC = () => {
               type="button"
               onClick={handleCreateSubmit}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-pesage-blue/20"
+              className="btn-primary text-xs px-4 py-2 flex items-center space-x-1.5"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>Enregistrer</span>
@@ -286,7 +286,7 @@ export const UnitsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setEditingUnit(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                className="btn-secondary text-xs px-4 py-2"
               >
                 Annuler
               </button>
@@ -294,7 +294,7 @@ export const UnitsPage: React.FC = () => {
                 type="button"
                 onClick={handleEditSubmit}
                 disabled={isSubmitting}
-                className="px-4 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-pesage-blue/20"
+                className="btn-primary text-xs px-4 py-2 flex items-center space-x-1.5"
               >
                 {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 <span>Enregistrer les modifications</span>

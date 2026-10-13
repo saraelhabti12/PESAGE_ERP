@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { customerService } from '@/services/customerService';
 import {
   PurchaseOrder,
   PurchaseOrderFormData,
@@ -9,12 +11,15 @@ import {
 } from '@/types/purchase';
 import { BusinessPartner } from '@/types/partner';
 import { Product } from '@/types/catalog';
+import { Warehouse } from '@/types/warehouse';
 import { PAYMENT_METHODS, PAYMENT_TERMS } from '@/constants/purchases';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { FormField } from '@/components/ui/FormField';
+import { Button } from '@/components/ui/Button';
+import { DatePeriodFilter, DatePeriodValue } from '@/components/ui/DatePeriodFilter';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useNotification } from '@/context/NotificationContext';
 import { useAuth } from '@/context/AuthContext';
@@ -39,9 +44,13 @@ import {
   ChevronRight,
   Package,
   Loader2,
+  Warehouse as WarehouseIcon,
+  RotateCcw,
+  X,
 } from 'lucide-react';
 
 export const PurchasesPage: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
 
@@ -49,6 +58,7 @@ export const PurchasesPage: React.FC = () => {
   const [purchases, setPurchases] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<BusinessPartner[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingPrereqs, setIsLoadingPrereqs] = useState(false);
 
@@ -56,6 +66,10 @@ export const PurchasesPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [periodFilter, setPeriodFilter] = useState<DatePeriodValue>({
+    preset: 'ALL',
+    label: 'Toutes les dates',
+  });
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -92,6 +106,7 @@ export const PurchasesPage: React.FC = () => {
   const [receiptForm, setReceiptForm] = useState<ReceiptFormData>({
     reference: '',
     purchase_order_id: 0,
+    warehouse_id: '',
     receipt_date: new Date().toISOString().split('T')[0],
     notes: '',
     items: [],
@@ -106,25 +121,28 @@ export const PurchasesPage: React.FC = () => {
   const canApprove = roleNames.includes('ADMIN') || userPerms.includes('purchases.approve');
   const canReceive = roleNames.includes('ADMIN') || userPerms.includes('purchase_receipts.create');
 
-  // Load initial suppliers & products for forms
+  // Load initial suppliers, products & active warehouses for forms
   const loadPrerequisites = useCallback(async () => {
     setIsLoadingPrereqs(true);
     try {
-      const [suppRes, prodRes] = await Promise.all([
-        api.get<BusinessPartner[]>('/api/v1/suppliers?size=100'),
+      const [rawSupps, prodRes, whRes] = await Promise.all([
+        customerService.getSuppliers({ isActive: true }),
         api.get<Product[]>('/api/v1/products?size=100'),
+        api.get<Warehouse[]>('/api/v1/warehouses?is_active=true'),
       ]);
-      const rawSupps = Array.isArray(suppRes.data) ? suppRes.data : (suppRes.data as any)?.items || [];
       const rawProds = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data as any)?.items || [];
+      const rawWhs = Array.isArray(whRes.data) ? whRes.data : (whRes.data as any)?.items || [];
 
       const activeSupps = rawSupps.filter((s: BusinessPartner) => s.is_active !== false);
       const activeProds = rawProds.filter((p: Product) => p.is_active !== false);
+      const activeWhs = rawWhs.filter((w: Warehouse) => w.is_active !== false);
 
       setSuppliers(activeSupps);
       setProducts(activeProds);
+      setWarehouses(activeWhs);
     } catch (err) {
-      console.error('Failed loading suppliers or products', err);
-      showError('Impossible de charger la liste des fournisseurs et produits.');
+      console.error('Failed loading suppliers, products or warehouses', err);
+      showError('Impossible de charger la liste des fournisseurs, produits et dépôts.');
     } finally {
       setIsLoadingPrereqs(false);
     }
@@ -142,6 +160,8 @@ export const PurchasesPage: React.FC = () => {
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (supplierFilter !== 'all') url += `&supplier_id=${supplierFilter}`;
       if (statusFilter !== 'all') url += `&status=${statusFilter}`;
+      if (periodFilter.dateFrom) url += `&date_from=${periodFilter.dateFrom}`;
+      if (periodFilter.dateTo) url += `&date_to=${periodFilter.dateTo}`;
 
       const res = await api.get<PurchaseOrder[]>(url);
       setPurchases(res.data);
@@ -150,7 +170,7 @@ export const PurchasesPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [search, supplierFilter, statusFilter, showError]);
+  }, [search, supplierFilter, statusFilter, periodFilter, showError]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -413,6 +433,9 @@ export const PurchasesPage: React.FC = () => {
   };
 
   const handleOpenReceipt = async (order: PurchaseOrder) => {
+    if (warehouses.length === 0) {
+      await loadPrerequisites();
+    }
     const detail = await fetchOrderDetail(order.id);
     if (!detail) return;
 
@@ -433,6 +456,7 @@ export const PurchasesPage: React.FC = () => {
     setReceiptForm({
       reference: '',
       purchase_order_id: detail.id,
+      warehouse_id: '',
       receipt_date: new Date().toISOString().split('T')[0],
       notes: '',
       items: receiptableItems,
@@ -498,12 +522,13 @@ export const PurchasesPage: React.FC = () => {
       };
 
       if (editingOrder) {
-        await api.put(`/api/v1/purchases/${editingOrder.id}`, payload);
-        showSuccess('Commande d\'achat mise à jour avec succès.');
+        const res = await api.put<PurchaseOrder>(`/api/v1/purchases/${editingOrder.id}`, payload);
+        showSuccess(`Commande d'achat ${res.data.reference} mise à jour avec succès.`);
       } else {
-        await api.post('/api/v1/purchases', payload);
-        showSuccess('Commande d\'achat créée avec succès.');
+        const res = await api.post<PurchaseOrder>('/api/v1/purchases', payload);
+        showSuccess(`Commande d'achat ${res.data.reference} créée avec succès.`);
       }
+
 
       setIsCreateOpen(false);
       fetchPurchases();
@@ -587,6 +612,17 @@ export const PurchasesPage: React.FC = () => {
       return;
     }
 
+    // Validate warehouse selection if any item is tracked
+    const hasTrackedProducts = validItems.some((it) => {
+      const orderItem = receiptingOrder.items?.find((o) => o.id === it.purchase_order_item_id);
+      return orderItem?.product?.track_stock !== false;
+    });
+
+    if (hasTrackedProducts && !receiptForm.warehouse_id) {
+      showError('Veuillez sélectionner le dépôt de réception.');
+      return;
+    }
+
     // Validate no line exceeds remaining
     for (const line of receiptForm.items) {
       const orderItem = receiptingOrder.items?.find((it) => it.id === line.purchase_order_item_id);
@@ -607,12 +643,14 @@ export const PurchasesPage: React.FC = () => {
       const payload = {
         reference: receiptForm.reference?.trim() || undefined,
         purchase_order_id: receiptingOrder.id,
+        warehouse_id: receiptForm.warehouse_id ? Number(receiptForm.warehouse_id) : undefined,
         receipt_date: receiptForm.receipt_date ? new Date(receiptForm.receipt_date).toISOString() : undefined,
         notes: receiptForm.notes || null,
         items: validItems.map((v) => ({
           purchase_order_item_id: v.purchase_order_item_id,
           product_id: v.product_id,
           quantity_received: Number(v.quantity_received),
+          warehouse_id: receiptForm.warehouse_id ? Number(receiptForm.warehouse_id) : undefined,
           notes: v.notes || null,
         })),
       };
@@ -864,49 +902,125 @@ export const PurchasesPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-col md:flex-row items-center gap-3 bg-app-surface p-3.5 rounded-xl border border-app-border shadow-sm">
-        <div className="flex-1 w-full">
-          <SearchBar
-            value={search}
-            onChange={setSearch}
-            placeholder="Rechercher par référence, fournisseur ou code..."
-          />
+      <div className="bg-app-surface p-4 rounded-2xl border border-app-border shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+            <div className="w-64">
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder="Rechercher par référence, fournisseur..."
+              />
+            </div>
+
+            <DatePeriodFilter
+              value={periodFilter}
+              onChange={setPeriodFilter}
+              onReset={() => setPeriodFilter({ preset: 'ALL', label: 'Toutes les dates' })}
+            />
+
+            {/* Fournisseur Selector Filter */}
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              aria-label="Filtrer par fournisseur"
+              className="px-3 py-2 bg-app-surface text-app-text border border-app-border rounded-xl text-xs font-semibold focus:outline-none focus:border-pesage-blue shadow-xs"
+            >
+              <option value="all">Tous les fournisseurs</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.legal_name} ({s.code})
+                </option>
+              ))}
+            </select>
+
+            {/* Status Selector Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filtrer par statut"
+              className="px-3 py-2 bg-app-surface text-app-text border border-app-border rounded-xl text-xs font-semibold focus:outline-none focus:border-pesage-blue shadow-xs"
+            >
+              <option value="all">Tous les statuts</option>
+              <option value="DRAFT">Brouillons</option>
+              <option value="PENDING">En attente</option>
+              <option value="APPROVED">Approuvées</option>
+              <option value="PARTIALLY_RECEIVED">Partiellement reçues</option>
+              <option value="RECEIVED">Reçues</option>
+              <option value="CANCELLED">Annulées</option>
+            </select>
+          </div>
+
+          {(search.trim() !== '' || supplierFilter !== 'all' || statusFilter !== 'all' || periodFilter.preset !== 'ALL') && (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={RotateCcw}
+              onClick={() => {
+                setSearch('');
+                setSupplierFilter('all');
+                setStatusFilter('all');
+                setPeriodFilter({ preset: 'ALL', label: 'Toutes les dates' });
+              }}
+            >
+              Réinitialiser
+            </Button>
+          )}
         </div>
 
-        {/* Fournisseur Selector Filter */}
-        <div className="w-full md:w-64">
-          <select
-            value={supplierFilter}
-            onChange={(e) => setSupplierFilter(e.target.value)}
-            aria-label="Filtrer par fournisseur"
-            className="w-full px-3 py-2 text-sm bg-app-surface border border-app-border rounded-lg text-app-text-primary focus:outline-none focus:ring-2 focus:ring-pesage-blue"
-          >
-            <option value="all">Tous les fournisseurs</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.legal_name} ({s.code})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Status Selector Filter */}
-        <div className="w-full md:w-56">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filtrer par statut"
-            className="w-full px-3 py-2 text-sm bg-app-surface border border-app-border rounded-lg text-app-text-primary focus:outline-none focus:ring-2 focus:ring-pesage-blue"
-          >
-            <option value="all">Tous les statuts</option>
-            <option value="DRAFT">Brouillons (DRAFT)</option>
-            <option value="PENDING">En attente (PENDING)</option>
-            <option value="APPROVED">Approuvées (APPROVED)</option>
-            <option value="PARTIALLY_RECEIVED">Partiellement reçues</option>
-            <option value="RECEIVED">Reçues (RECEIVED)</option>
-            <option value="CANCELLED">Annulées (CANCELLED)</option>
-          </select>
-        </div>
+        {(search.trim() !== '' || supplierFilter !== 'all' || statusFilter !== 'all' || periodFilter.preset !== 'ALL') && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-app-border text-xs">
+            <span className="text-app-text-muted font-semibold">Filtres actifs :</span>
+            {periodFilter.preset !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-pesage-blue-subtle text-pesage-blue border border-pesage-blue/20 font-medium">
+                Période : {periodFilter.label}
+                <button
+                  type="button"
+                  onClick={() => setPeriodFilter({ preset: 'ALL', label: 'Toutes les dates' })}
+                  className="hover:text-red-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {supplierFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-app-text border border-app-border font-medium">
+                Fournisseur : {suppliers.find((s) => String(s.id) === supplierFilter)?.legal_name || supplierFilter}
+                <button
+                  type="button"
+                  onClick={() => setSupplierFilter('all')}
+                  className="hover:text-red-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {statusFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-app-text border border-app-border font-medium">
+                Statut : {statusFilter}
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className="hover:text-red-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {search.trim() !== '' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-app-text border border-app-border font-medium">
+                Recherche : "{search}"
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="hover:text-red-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Data Table */}
@@ -1197,17 +1311,17 @@ export const PurchasesPage: React.FC = () => {
               type="button"
               onClick={() => setIsCreateOpen(false)}
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium text-app-text-secondary hover:text-app-text-primary hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+              className="btn-secondary px-4 py-2"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 text-sm font-medium text-white bg-pesage-blue hover:bg-pesage-dark-blue rounded-lg shadow-sm transition disabled:opacity-50 flex items-center gap-2"
+              className="btn-primary px-5 py-2 flex items-center gap-2"
             >
               {isSubmitting && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {editingOrder ? 'Enregistrer les modifications' : 'Créer la commande'}
+              <span>{editingOrder ? 'Enregistrer les modifications' : 'Créer la commande'}</span>
             </button>
           </div>
         </form>
@@ -1369,8 +1483,15 @@ export const PurchasesPage: React.FC = () => {
                       className="p-3 bg-white dark:bg-gray-800 border border-app-border rounded-lg text-xs flex items-center justify-between"
                     >
                       <div>
-                        <div className="font-mono font-bold text-app-text-primary">
-                          {rec.reference}
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-app-text-primary">
+                            {rec.reference}
+                          </span>
+                          {rec.warehouse && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-950/50 text-pesage-blue border border-blue-200 dark:border-blue-800">
+                              Dépôt : {rec.warehouse.code} — {rec.warehouse.name}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] text-app-text-muted">
                           Reçu le {formatDate(rec.receipt_date)} par {rec.receiver?.first_name} {rec.receiver?.last_name || rec.receiver?.email}
@@ -1395,7 +1516,7 @@ export const PurchasesPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleApproveOrder(viewingOrder.id)}
-                    className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                    className="btn-success text-xs px-4 py-2 flex items-center gap-1.5"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     Approuver la commande
@@ -1409,10 +1530,24 @@ export const PurchasesPage: React.FC = () => {
                       setViewingOrder(null);
                       handleOpenReceipt(viewingOrder);
                     }}
-                    className="px-4 py-2 text-xs font-semibold text-white bg-pesage-orange hover:bg-orange-600 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                    className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
                   >
                     <Truck className="w-4 h-4" />
                     Réceptionner des articles
+                  </button>
+                )}
+
+                {(viewingOrder.status === 'APPROVED' || viewingOrder.status === 'PARTIALLY_RECEIVED' || viewingOrder.status === 'RECEIVED') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingOrder(null);
+                      navigate(`/factures-achat?purchase_id=${viewingOrder.id}`);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-pesage-blue-subtle text-pesage-blue border border-pesage-blue/30 hover:bg-pesage-blue/20 text-xs font-semibold flex items-center gap-1.5 transition"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Facturer
                   </button>
                 )}
 
@@ -1420,7 +1555,7 @@ export const PurchasesPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setCancellingOrder(viewingOrder)}
-                    className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg transition flex items-center gap-1.5"
+                    className="btn-danger text-xs px-3 py-2 flex items-center gap-1.5"
                   >
                     <XCircle className="w-4 h-4" />
                     Annuler
@@ -1431,7 +1566,7 @@ export const PurchasesPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setViewingOrder(null)}
-                className="px-4 py-2 text-xs font-medium text-app-text-secondary hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+                className="btn-secondary text-xs px-4 py-2"
               >
                 Fermer
               </button>
@@ -1456,7 +1591,7 @@ export const PurchasesPage: React.FC = () => {
               Saisissez les quantités réellement réceptionnées ci-dessous.
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <FormField label="N° Bon de Livraison / Référence">
                 <input
                   type="text"
@@ -1475,6 +1610,28 @@ export const PurchasesPage: React.FC = () => {
                   required
                   className="w-full px-3 py-2 text-xs bg-app-surface border border-app-border rounded-lg text-app-text-primary focus:outline-none focus:ring-2 focus:ring-pesage-blue"
                 />
+              </FormField>
+
+              <FormField label="Dépôt de réception *">
+                <select
+                  id="receipt-warehouse-select"
+                  value={receiptForm.warehouse_id}
+                  onChange={(e) =>
+                    setReceiptForm({
+                      ...receiptForm,
+                      warehouse_id: e.target.value ? Number(e.target.value) : '',
+                    })
+                  }
+                  required
+                  className="w-full px-3 py-2 text-xs bg-app-surface border border-app-border rounded-lg text-app-text-primary focus:outline-none focus:ring-2 focus:ring-pesage-blue"
+                >
+                  <option value="">Sélectionner un dépôt...</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.code} — {w.name}
+                    </option>
+                  ))}
+                </select>
               </FormField>
             </div>
 
@@ -1498,7 +1655,7 @@ export const PurchasesPage: React.FC = () => {
                       }),
                     }));
                   }}
-                  className="text-xs font-semibold text-pesage-blue hover:underline"
+                  className="text-xs font-semibold text-pesage-blue dark:text-blue-400 hover:underline"
                 >
                   Tout recevoir
                 </button>
@@ -1579,14 +1736,14 @@ export const PurchasesPage: React.FC = () => {
                 type="button"
                 onClick={() => setReceiptingOrder(null)}
                 disabled={isSubmitting}
-                className="px-4 py-2 text-xs font-medium text-app-text-secondary hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+                className="btn-secondary px-4 py-2"
               >
                 Annuler
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-5 py-2 text-xs font-semibold text-white bg-pesage-orange hover:bg-orange-600 rounded-lg shadow-sm transition disabled:opacity-50 flex items-center gap-2"
+                className="btn-primary px-5 py-2 flex items-center gap-2"
               >
                 {isSubmitting && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                 Confirmer la réception

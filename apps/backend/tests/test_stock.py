@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime
 from fastapi.testclient import TestClient
 from app.core.config import settings
 
@@ -663,4 +664,216 @@ def test_warehouse_edit_and_deactivation_workflows(client: TestClient):
     toggle_react = client.patch(f"/api/v1/warehouses/{wh1['id']}/toggle-active", headers=headers)
     assert toggle_react.status_code == 200
     assert toggle_react.json()["is_active"] is True
+
+
+def test_stock_stats_tracked_product_without_stock_balance(client: TestClient):
+    """Verifies that active products with track_stock=True but no StockBalance rows are counted as managed_products and out_of_stock."""
+    headers = get_auth_header(client)
+
+    cat = client.post("/api/v1/categories", json={"name": "Cat Stats Test", "code": f"CAT-ST-{datetime.now().timestamp()}"}, headers=headers).json()
+    pt = client.post("/api/v1/product-types", json={"name": "Type Stats Test", "code": f"TYP-ST-{datetime.now().timestamp()}"}, headers=headers).json()
+    u = client.post("/api/v1/units", json={"name": "Unité Stats", "abbreviation": "UST"}, headers=headers).json()
+
+    # Create tracked product with NO stock balance
+    prod = client.post(
+        "/api/v1/products",
+        json={
+            "sku": f"PROD-NO-BAL-{datetime.now().timestamp()}",
+            "designation": "Produit Sans Balance Stock",
+            "category_id": cat["id"],
+            "product_type_id": pt["id"],
+            "unit_id": u["id"],
+            "purchase_price": 500.00,
+            "sale_price": 800.00,
+            "is_active": True,
+            "track_stock": True,
+        },
+        headers=headers,
+    ).json()
+
+    stats = client.get("/api/v1/stock/stats", headers=headers).json()
+    assert stats["managed_products"] >= 1
+    assert stats["total_tracked_products"] >= 1
+    assert stats["tracked_products_count"] >= 1
+    assert stats["out_of_stock"] >= 1
+    assert stats["out_of_stock_count"] >= 1
+
+
+def test_stock_stats_business_rules_matrix(client: TestClient):
+    """Tests the exact matrix:
+    - Product A: track_stock=true, stock=79
+    - Product B: track_stock=true, no stock_balance row
+    - Product C: track_stock=true, stock=0
+    - Product D: track_stock=false
+    """
+    headers = get_auth_header(client)
+    ts = int(datetime.now().timestamp() * 1000)
+
+    cat = client.post("/api/v1/categories", json={"name": f"Cat Matrix {ts}", "code": f"CM-{ts}"}, headers=headers).json()
+    pt = client.post("/api/v1/product-types", json={"name": f"Type Matrix {ts}", "code": f"TM-{ts}"}, headers=headers).json()
+    u = client.post("/api/v1/units", json={"name": f"Unit Matrix {ts}", "abbreviation": f"u{ts}"}, headers=headers).json()
+    wh = client.post("/api/v1/warehouses", json={"code": f"WH-M-{ts}", "name": f"Warehouse Matrix {ts}", "type": "MAIN"}, headers=headers).json()
+
+    # Product A: track_stock=true, stock=79, purchase_price=100
+    prod_a = client.post(
+        "/api/v1/products",
+        json={
+            "sku": f"PROD-A-{ts}",
+            "designation": f"Product A {ts}",
+            "category_id": cat["id"],
+            "product_type_id": pt["id"],
+            "unit_id": u["id"],
+            "purchase_price": 100.00,
+            "sale_price": 150.00,
+            "is_active": True,
+            "track_stock": True,
+        },
+        headers=headers,
+    ).json()
+    client.post(
+        "/api/v1/stock/adjustments",
+        json={"product_id": prod_a["id"], "warehouse_id": wh["id"], "new_quantity": 79.0, "reason": "Stock initial A"},
+        headers=headers,
+    )
+
+    # Product B: track_stock=true, no stock balance, purchase_price=200
+    prod_b = client.post(
+        "/api/v1/products",
+        json={
+            "sku": f"PROD-B-{ts}",
+            "designation": f"Product B {ts}",
+            "category_id": cat["id"],
+            "product_type_id": pt["id"],
+            "unit_id": u["id"],
+            "purchase_price": 200.00,
+            "sale_price": 250.00,
+            "is_active": True,
+            "track_stock": True,
+        },
+        headers=headers,
+    ).json()
+
+    # Product C: track_stock=true, stock=0, purchase_price=300
+    prod_c = client.post(
+        "/api/v1/products",
+        json={
+            "sku": f"PROD-C-{ts}",
+            "designation": f"Product C {ts}",
+            "category_id": cat["id"],
+            "product_type_id": pt["id"],
+            "unit_id": u["id"],
+            "purchase_price": 300.00,
+            "sale_price": 350.00,
+            "is_active": True,
+            "track_stock": True,
+        },
+        headers=headers,
+    ).json()
+    # Explicit zero balance
+    client.post(
+        "/api/v1/stock/adjustments",
+        json={"product_id": prod_c["id"], "warehouse_id": wh["id"], "new_quantity": 0.0, "reason": "Initial zero C"},
+        headers=headers,
+    )
+
+    # Product D: track_stock=false, purchase_price=400
+    prod_d = client.post(
+        "/api/v1/products",
+        json={
+            "sku": f"PROD-D-{ts}",
+            "designation": f"Product D Non Stock {ts}",
+            "category_id": cat["id"],
+            "product_type_id": pt["id"],
+            "unit_id": u["id"],
+            "purchase_price": 400.00,
+            "sale_price": 450.00,
+            "is_active": True,
+            "track_stock": False,
+        },
+        headers=headers,
+    ).json()
+
+    stats = client.get("/api/v1/stock/stats", headers=headers).json()
+
+    # Verify tracked products
+    assert stats["managed_products"] >= 3
+    assert stats["total_tracked_products"] >= 3
+    assert stats["out_of_stock"] >= 2  # Product B and Product C
+    assert stats["total_quantity"] >= 79.0
+    assert stats["total_value_ht"] >= 79.0 * 100.0
+
+
+def test_stock_stats_multi_warehouse_aggregation(client: TestClient):
+    """Verifies that a product in multiple warehouses has its stock summed and is counted once for managed_products."""
+    headers = get_auth_header(client)
+    ts = int(datetime.now().timestamp() * 1000)
+
+    cat = client.post("/api/v1/categories", json={"name": f"Cat MW {ts}", "code": f"CMW-{ts}"}, headers=headers).json()
+    pt = client.post("/api/v1/product-types", json={"name": f"Type MW {ts}", "code": f"TMW-{ts}"}, headers=headers).json()
+    u = client.post("/api/v1/units", json={"name": f"Unit MW {ts}", "abbreviation": f"umw{ts}"}, headers=headers).json()
+
+    wh1 = client.post("/api/v1/warehouses", json={"code": f"WH-MW1-{ts}", "name": "Dépôt Ain Sbaa", "type": "MAIN"}, headers=headers).json()
+    wh2 = client.post("/api/v1/warehouses", json={"code": f"WH-MW2-{ts}", "name": "Dépôt Tanger", "type": "WAREHOUSE"}, headers=headers).json()
+
+    prod = client.post(
+        "/api/v1/products",
+        json={
+            "sku": f"PROD-MW-{ts}",
+            "designation": f"Product Multi Warehouse {ts}",
+            "category_id": cat["id"],
+            "product_type_id": pt["id"],
+            "unit_id": u["id"],
+            "purchase_price": 50.00,
+            "sale_price": 80.00,
+            "is_active": True,
+            "track_stock": True,
+        },
+        headers=headers,
+    ).json()
+
+    # Add 50 in WH1, 20 in WH2 -> Total 70
+    client.post(
+        "/api/v1/stock/adjustments",
+        json={"product_id": prod["id"], "warehouse_id": wh1["id"], "new_quantity": 50.0, "reason": "Init WH1"},
+        headers=headers,
+    )
+    client.post(
+        "/api/v1/stock/adjustments",
+        json={"product_id": prod["id"], "warehouse_id": wh2["id"], "new_quantity": 20.0, "reason": "Init WH2"},
+        headers=headers,
+    )
+
+    stats_global = client.get("/api/v1/stock/stats", headers=headers).json()
+    assert stats_global["managed_products"] >= 1
+    assert stats_global["total_quantity"] >= 70.0
+
+    # Depot specific stats
+    stats_wh1 = client.get(f"/api/v1/stock/stats?warehouse_id={wh1['id']}", headers=headers).json()
+    assert stats_wh1["total_quantity"] >= 50.0
+
+
+def test_main_dashboard_stats_endpoint_includes_stock(client: TestClient):
+    """Verifies that /api/v1/dashboard/stats returns the stock section conforming to section 12 requirements."""
+    headers = get_auth_header(client)
+
+    res = client.get("/api/v1/dashboard/stats", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+
+    assert "stock" in data
+    assert data["stock"] is not None
+    stock = data["stock"]
+
+    assert "managed_products" in stock
+    assert "total_quantity" in stock
+    assert "total_value_ht" in stock
+    assert "low_stock" in stock
+    assert "out_of_stock" in stock
+    assert "overstock" in stock
+    assert "active_warehouses" in stock
+    assert "movement_count" in stock
+    assert isinstance(stock["managed_products"], int)
+    assert isinstance(stock["total_quantity"], (int, float))
+    assert isinstance(stock["total_value_ht"], (int, float))
+
 

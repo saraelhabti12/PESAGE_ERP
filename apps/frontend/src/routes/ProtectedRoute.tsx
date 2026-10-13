@@ -8,9 +8,9 @@ export const ProtectedRoute: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
-        <span className="text-xs text-slate-400 font-medium">Verifying session security...</span>
+      <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="w-8 h-8 text-pesage-blue animate-spin" />
+        <span className="text-xs text-app-text-muted font-medium">Vérification de la session...</span>
       </div>
     );
   }

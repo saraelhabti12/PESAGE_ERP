@@ -26,6 +26,11 @@ import app.models.partner_model  # noqa: F401
 import app.models.purchase_model  # noqa: F401
 import app.models.notification_model  # noqa: F401
 import app.models.stock_model  # noqa: F401
+import app.models.sale_model  # noqa: F401
+import app.models.quote_model  # noqa: F401
+import app.models.delivery_note_model  # noqa: F401
+import app.models.invoice_model  # noqa: F401
+import app.models.payment_model  # noqa: F401
 
 # Alembic Config object
 config = context.config

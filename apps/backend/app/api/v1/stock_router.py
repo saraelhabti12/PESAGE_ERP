@@ -74,10 +74,11 @@ def get_single_stock_balance(
     dependencies=[Depends(require_permission("stock.view"))],
 )
 def get_stock_stats(
+    warehouse_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Returns aggregated real stock KPIs and metrics."""
-    return StockService.get_stock_stats(db)
+    return StockService.get_stock_stats(db, warehouse_id=warehouse_id)
 
 
 @router.get(

@@ -47,7 +47,13 @@ class PurchaseService:
         now = datetime.now(timezone.utc)
         prefix = f"PO-{now.strftime('%Y%m')}-"
         count = db.query(func.count(PurchaseOrder.id)).filter(PurchaseOrder.reference.like(f"{prefix}%")).scalar() or 0
-        return f"{prefix}{count + 1:04d}"
+        candidate = f"{prefix}{count + 1:04d}"
+        seq = count + 1
+        while db.query(PurchaseOrder).filter(PurchaseOrder.reference == candidate).first():
+            seq += 1
+            candidate = f"{prefix}{seq:04d}"
+        return candidate
+
 
     @classmethod
     def create_purchase_order(cls, db: Session, data: PurchaseOrderCreate, user_id: int) -> PurchaseOrder:
@@ -323,7 +329,9 @@ class PurchaseService:
             .options(
                 selectinload(PurchaseOrder.items).selectinload(PurchaseOrderItem.product),
                 selectinload(PurchaseOrder.receipts).selectinload(PurchaseReceipt.items).selectinload(PurchaseReceiptItem.product),
+                selectinload(PurchaseOrder.receipts).selectinload(PurchaseReceipt.items).selectinload(PurchaseReceiptItem.warehouse),
                 selectinload(PurchaseOrder.receipts).selectinload(PurchaseReceipt.receiver),
+                selectinload(PurchaseOrder.receipts).selectinload(PurchaseReceipt.warehouse),
                 selectinload(PurchaseOrder.supplier),
                 selectinload(PurchaseOrder.creator),
             )
@@ -369,8 +377,20 @@ class PurchaseService:
             query = query.filter(PurchaseOrder.order_date <= end_date)
 
         total = query.count()
-        orders = query.order_by(PurchaseOrder.order_date.desc(), PurchaseOrder.id.desc()).offset(skip).limit(limit).all()
+        orders = (
+            query.options(
+                selectinload(PurchaseOrder.items).selectinload(PurchaseOrderItem.product),
+                selectinload(PurchaseOrder.supplier),
+            )
+            .order_by(PurchaseOrder.order_date.desc(), PurchaseOrder.id.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
         return orders, total
+
+
+from app.models.stock_model import Warehouse
 
 
 class PurchaseReceiptService:
@@ -380,7 +400,13 @@ class PurchaseReceiptService:
         now = datetime.now(timezone.utc)
         prefix = f"REC-{now.strftime('%Y%m')}-"
         count = db.query(func.count(PurchaseReceipt.id)).filter(PurchaseReceipt.reference.like(f"{prefix}%")).scalar() or 0
-        return f"{prefix}{count + 1:04d}"
+        candidate = f"{prefix}{count + 1:04d}"
+        seq = count + 1
+        while db.query(PurchaseReceipt).filter(PurchaseReceipt.reference == candidate).first():
+            seq += 1
+            candidate = f"{prefix}{seq:04d}"
+        return candidate
+
 
     @classmethod
     def create_receipt(cls, db: Session, data: PurchaseReceiptCreate, user_id: int) -> PurchaseReceipt:
@@ -407,19 +433,71 @@ class PurchaseReceiptService:
                 detail=f"Un bon de réception avec la référence '{reference}' existe déjà.",
             )
 
-        # 3. Create Receipt
+        # 3. Validate Destination Warehouse
+        order_items_map = {item.id: item for item in order.items}
+        
+        # Check if any receipt item belongs to a stock-tracked product
+        has_stock_tracked_items = False
+        # Validate header warehouse if provided
+        target_warehouse = None
+        if data.warehouse_id:
+            target_warehouse = db.query(Warehouse).filter(Warehouse.id == data.warehouse_id).first()
+            if not target_warehouse:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Le dépôt sélectionné est introuvable.",
+                )
+            if not target_warehouse.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Le dépôt sélectionné est inactif.",
+                )
+
+        has_stock_tracked_items = False
+        for item_in in data.items:
+            order_item = order_items_map.get(item_in.purchase_order_item_id)
+            if order_item:
+                product = db.query(Product).filter(Product.id == order_item.product_id).first()
+                if product and product.track_stock:
+                    has_stock_tracked_items = True
+                    item_wh_id = item_in.warehouse_id or data.warehouse_id
+                    if not item_wh_id:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Veuillez sélectionner le dépôt de réception.",
+                        )
+                    if item_in.warehouse_id:
+                        item_wh = db.query(Warehouse).filter(Warehouse.id == item_in.warehouse_id).first()
+                        if not item_wh:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Le dépôt sélectionné est introuvable.",
+                            )
+                        if not item_wh.is_active:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Le dépôt sélectionné est inactif.",
+                            )
+                        if not target_warehouse:
+                            target_warehouse = item_wh
+
+        if has_stock_tracked_items and not target_warehouse:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Veuillez sélectionner le dépôt de réception.",
+            )
+
+        # 4. Create Receipt
         receipt_date = data.receipt_date or datetime.now(timezone.utc)
         receipt = PurchaseReceipt(
             reference=reference,
             purchase_order_id=order.id,
+            warehouse_id=target_warehouse.id if target_warehouse else None,
             receipt_date=receipt_date,
             status=PurchaseReceiptStatus.CONFIRMED,
             notes=data.notes,
             received_by=user_id,
         )
-
-        # 4. Map existing order items by ID
-        order_items_map = {item.id: item for item in order.items}
 
         for item_in in data.items:
             order_item = order_items_map.get(item_in.purchase_order_item_id)
@@ -450,6 +528,21 @@ class PurchaseReceiptService:
                     detail=f"La quantité reçue ({qty_received}) dépasse le reste à recevoir ({current_remaining}) pour le produit '{product_name}'.",
                 )
 
+            # Validate line item warehouse if distinct
+            item_wh_id = item_in.warehouse_id or (target_warehouse.id if target_warehouse else None)
+            if item_in.warehouse_id:
+                item_wh = db.query(Warehouse).filter(Warehouse.id == item_in.warehouse_id).first()
+                if not item_wh:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Le dépôt sélectionné n'existe pas.",
+                    )
+                if not item_wh.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Le dépôt sélectionné est inactif.",
+                    )
+
             # Update order item received & remaining counters
             order_item.quantity_received = round(float(order_item.quantity_received) + qty_received, 2)
             order_item.quantity_remaining = round(float(order_item.quantity_ordered) - float(order_item.quantity_received), 2)
@@ -459,7 +552,7 @@ class PurchaseReceiptService:
             receipt_item = PurchaseReceiptItem(
                 purchase_order_item_id=order_item.id,
                 product_id=order_item.product_id,
-                warehouse_id=item_in.warehouse_id,
+                warehouse_id=item_wh_id,
                 quantity_received=qty_received,
                 notes=item_in.notes,
             )
@@ -506,7 +599,9 @@ class PurchaseReceiptService:
             db.query(PurchaseReceipt)
             .options(
                 selectinload(PurchaseReceipt.items).selectinload(PurchaseReceiptItem.product),
+                selectinload(PurchaseReceipt.items).selectinload(PurchaseReceiptItem.warehouse),
                 selectinload(PurchaseReceipt.receiver),
+                selectinload(PurchaseReceipt.warehouse),
                 selectinload(PurchaseReceipt.purchase_order),
             )
             .filter(PurchaseReceipt.id == receipt_id)
@@ -520,12 +615,24 @@ class PurchaseReceiptService:
     def list_receipts(
         db: Session,
         purchase_order_id: Optional[int] = None,
+        supplier_id: Optional[int] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         skip: int = 0,
         limit: int = 50,
     ) -> Tuple[List[PurchaseReceipt], int]:
-        query = db.query(PurchaseReceipt)
+        query = (
+            db.query(PurchaseReceipt)
+            .options(
+                selectinload(PurchaseReceipt.items).selectinload(PurchaseReceiptItem.product),
+                selectinload(PurchaseReceipt.items).selectinload(PurchaseReceiptItem.warehouse),
+                selectinload(PurchaseReceipt.receiver),
+                selectinload(PurchaseReceipt.warehouse),
+            )
+        )
+
+        if supplier_id:
+            query = query.join(PurchaseReceipt.purchase_order).filter(PurchaseOrder.supplier_id == supplier_id)
 
         if purchase_order_id:
             query = query.filter(PurchaseReceipt.purchase_order_id == purchase_order_id)

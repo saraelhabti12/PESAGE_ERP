@@ -66,7 +66,9 @@ export const StockPage: React.FC = () => {
       setWarehouses(Array.isArray(whRes.data) ? whRes.data : []);
 
       // 2. Fetch Stock Stats
-      const statsRes = await api.get<StockStats>('/api/v1/stock/stats');
+      const statsParams: Record<string, number> = {};
+      if (warehouseFilter) statsParams.warehouse_id = Number(warehouseFilter);
+      const statsRes = await api.get<StockStats>('/api/v1/stock/stats', { params: statsParams });
       setStats(statsRes.data);
 
       // 3. Fetch Stock Balances
@@ -207,7 +209,7 @@ export const StockPage: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 text-2xl font-black text-slate-900">
-            {(stats?.total_stock_value || 0).toLocaleString('fr-FR', {
+            {(stats?.total_value_ht ?? stats?.total_stock_value ?? 0).toLocaleString('fr-FR', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}{' '}
@@ -226,7 +228,7 @@ export const StockPage: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 text-2xl font-black text-slate-900">
-            {stats?.total_tracked_products || 0}
+            {stats?.managed_products ?? stats?.total_tracked_products ?? stats?.tracked_products_count ?? 0}
           </div>
           <div className="text-xs text-slate-400 mt-1">Produits avec suivi d'inventaire actif</div>
         </div>
@@ -241,7 +243,7 @@ export const StockPage: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 text-2xl font-black text-amber-600">
-            {stats?.low_stock_count || 0}
+            {stats?.low_stock ?? stats?.low_stock_count ?? 0}
           </div>
           <div className="text-xs text-slate-400 mt-1">Quantité ≤ Seuil d'Alerte Minimum</div>
         </div>
@@ -256,7 +258,7 @@ export const StockPage: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 text-2xl font-black text-rose-600">
-            {stats?.out_of_stock_count || 0}
+            {stats?.out_of_stock ?? stats?.out_of_stock_count ?? 0}
           </div>
           <div className="text-xs text-slate-400 mt-1">Quantité disponible = 0</div>
         </div>

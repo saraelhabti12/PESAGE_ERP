@@ -109,3 +109,27 @@ def require_permission(permission_code: str) -> Callable:
         )
 
     return permission_checker
+
+
+def require_any_permission(*permission_codes: str) -> Callable:
+    """Dependency factory enforcing that user has at least one of the specified permissions."""
+    def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+        role_names = {role.name for role in current_user.roles}
+        if "ADMIN" in role_names:
+            return current_user
+
+        user_permissions: Set[str] = set()
+        for role in current_user.roles:
+            for perm in role.permissions:
+                user_permissions.add(perm.code)
+
+        if any(code in user_permissions for code in permission_codes):
+            return current_user
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied",
+        )
+
+    return permission_checker
+

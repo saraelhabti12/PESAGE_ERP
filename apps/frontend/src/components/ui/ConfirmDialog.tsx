@@ -9,7 +9,10 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  confirmText?: string;
   cancelLabel?: string;
+  cancelText?: string;
+  variant?: 'danger' | 'primary' | 'warning' | string;
   isLoading?: boolean;
 }
 
@@ -19,10 +22,16 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   title,
   message,
-  confirmLabel = 'Confirmer',
-  cancelLabel = 'Annuler',
+  confirmLabel,
+  confirmText,
+  cancelLabel,
+  cancelText,
+  variant = 'danger',
   isLoading = false,
 }) => {
+  const finalConfirmLabel = confirmText || confirmLabel || 'Confirmer';
+  const finalCancelLabel = cancelText || cancelLabel || 'Annuler';
+  const isDanger = variant === 'danger';
   return (
     <Modal
       isOpen={isOpen}
@@ -35,18 +44,18 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="px-4 py-2 rounded-xl bg-app-surface-subtle hover:bg-app-surface-hover text-app-text-secondary text-xs font-semibold border border-app-border"
+            className="btn-secondary px-4 py-2"
           >
-            {cancelLabel}
+            {finalCancelLabel}
           </button>
           <button
             type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm"
+            className={`px-4 py-2 ${isDanger ? 'btn-danger' : 'btn-primary'}`}
           >
             {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            <span>{confirmLabel}</span>
+            <span>{finalConfirmLabel}</span>
           </button>
         </>
       }

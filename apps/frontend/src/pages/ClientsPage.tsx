@@ -591,14 +591,14 @@ export const ClientsPage: React.FC = () => {
               type="button"
               disabled={isSubmitting}
               onClick={() => setIsCreateOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-app-text-muted hover:bg-slate-100 transition-colors"
+              className="btn-secondary text-xs px-4 py-2"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm hover:shadow transition-all"
+              className="btn-primary text-xs px-5 py-2 inline-flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Créer le client
@@ -772,14 +772,14 @@ export const ClientsPage: React.FC = () => {
               type="button"
               disabled={isSubmitting}
               onClick={() => setEditingClient(null)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-app-text-muted hover:bg-slate-100 transition-colors"
+              className="btn-secondary text-xs px-4 py-2"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-pesage-blue hover:bg-pesage-blue-dark text-white font-semibold text-xs shadow-sm hover:shadow transition-all"
+              className="btn-primary text-xs px-5 py-2 inline-flex items-center gap-2"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Enregistrer les modifications

@@ -15,9 +15,15 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
     response_model=DashboardStatsResponse,
     status_code=status.HTTP_200_OK,
 )
+@router.get(
+    "/statistics",
+    response_model=DashboardStatsResponse,
+    status_code=status.HTTP_200_OK,
+)
 def get_dashboard_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Retrieves real database-backed metrics and chronological recent activity across all ERP modules."""
     return DashboardService.get_stats(db=db)
+

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
 
-    CORS_ORIGINS: Union[List[str], str] = [
+    CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:8000",
@@ -44,12 +44,20 @@ class Settings(BaseSettings):
     @classmethod
     def parse_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str):
-            if not v.strip():
+            trimmed = v.strip()
+            if not trimmed:
                 return []
             import json
-            if v.startswith("[") and v.endswith("]"):
-                return json.loads(v)
-            return [i.strip() for i in v.split(",") if i.strip()]
+            if trimmed.startswith("[") and trimmed.endswith("]"):
+                try:
+                    parsed = json.loads(trimmed)
+                    if isinstance(parsed, list):
+                        return [str(i).rstrip("/").strip() for i in parsed if str(i).strip()]
+                except Exception:
+                    pass
+            return [i.rstrip("/").strip() for i in trimmed.split(",") if i.strip()]
+        elif isinstance(v, list):
+            return [str(i).rstrip("/").strip() for i in v if str(i).strip()]
         return v
 
     @field_validator("REDIS_URL", mode="before")

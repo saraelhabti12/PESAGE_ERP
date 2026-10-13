@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
+import { getApiErrorMessage } from '@/lib/api';
 import { Lock, Mail, Loader2, ShieldCheck, Sun, Moon } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -21,30 +22,20 @@ export const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setIsLoading(true);
     setError(null);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       navigate('/dashboard', { replace: true });
     } catch (err: any) {
-      if (!err.response) {
-        setError('Impossible de contacter le serveur.');
-      } else if (err.response.status === 401) {
-        setError(err.response?.data?.detail || 'Adresse e-mail ou mot de passe incorrect.');
-      } else if (err.response.status === 422) {
-        const details = err.response?.data?.detail;
-        if (Array.isArray(details)) {
-          setError(details.map((d: any) => d.msg).join(', '));
-        } else {
-          setError('Données de formulaire non valides.');
-        }
+      if (!err.response && !err.status) {
+        setError('Impossible de contacter le serveur backend.');
+      } else if (err.response?.status === 401) {
+        setError('Adresse e-mail ou mot de passe incorrect.');
       } else {
-        setError(
-          err.response?.data?.detail ||
-            err.response?.data?.error?.message ||
-            'Une erreur est survenue lors de la connexion.'
-        );
+        setError(getApiErrorMessage(err, 'Une erreur est survenue lors de la connexion.'));
       }
     } finally {
       setIsLoading(false);

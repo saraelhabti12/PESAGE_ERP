@@ -209,9 +209,20 @@ class InventorySessionRead(BaseModel):
 # STOCK DASHBOARD STATS SCHEMAS
 # ----------------------------------------------------
 class StockStatsResponse(BaseModel):
-    total_stock_value: float = 0.0
+    managed_products: int = 0
+    total_tracked_products: int = 0
     tracked_products_count: int = 0
-    out_of_stock_count: int = 0
-    low_stock_count: int = 0
-    overstock_count: int = 0
     total_quantity: float = 0.0
+    total_value_ht: float = 0.0
+    total_stock_value: float = 0.0
+    low_stock: int = 0
+    low_stock_count: int = 0
+    out_of_stock: int = 0
+    out_of_stock_count: int = 0
+    overstock: int = 0
+    overstock_count: int = 0
+    active_warehouses: int = 0
+    movement_count: int = 0
+    total_movements_today: int = 0
+
+    model_config = ConfigDict(from_attributes=True)

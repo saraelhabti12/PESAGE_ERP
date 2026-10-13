@@ -132,6 +132,18 @@ class PurchaseOrderRead(BaseModel):
     supplier: Optional[PartnerSummary] = None
     creator: Optional[UserSummary] = None
     items_count: Optional[int] = 0
+    items: List[PurchaseOrderItemRead] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------
+class WarehouseSummary(BaseModel):
+    id: int
+    code: str
+    name: str
+    type: Optional[str] = None
+    is_active: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -157,6 +169,7 @@ class PurchaseReceiptItemRead(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
     product: Optional[ProductSummary] = None
+    warehouse: Optional[WarehouseSummary] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -164,6 +177,7 @@ class PurchaseReceiptItemRead(BaseModel):
 class PurchaseReceiptCreate(BaseModel):
     reference: Optional[str] = Field(None, max_length=100)
     purchase_order_id: int
+    warehouse_id: Optional[int] = None
     receipt_date: Optional[datetime] = None
     notes: Optional[str] = None
     items: List[PurchaseReceiptItemCreate] = Field(min_length=1, description="Receipt must contain at least one item")
@@ -173,6 +187,7 @@ class PurchaseReceiptRead(BaseModel):
     id: int
     reference: str
     purchase_order_id: int
+    warehouse_id: Optional[int] = None
     receipt_date: datetime
     status: PurchaseReceiptStatus
     notes: Optional[str] = None
@@ -180,6 +195,7 @@ class PurchaseReceiptRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     receiver: Optional[UserSummary] = None
+    warehouse: Optional[WarehouseSummary] = None
     items: List[PurchaseReceiptItemRead] = []
 
     model_config = ConfigDict(from_attributes=True)
